@@ -1,0 +1,29 @@
+#########################################
+# Syntax Coloring Map ESP Signer
+#########################################
+
+#########################################
+# Classes (KEYWORD1)
+#########################################
+
+Signer  KEYWORD1
+
+###############################################
+# Methods and Functions (KEYWORD2)
+###############################################
+
+begin   KEYWORD2
+tokenReady  KEYWORD2
+accessToken KEYWORD2
+getTokenType    KEYWORD2
+getTokenStatus  KEYWORD2
+getTokenError   KEYWORD2
+sdBegin KEYWORD2
+
+
+######################################
+# Struct (LITERAL1)
+#######################################
+
+SignerConfig    LITERAL1
+TokenInfo   LITERAL1

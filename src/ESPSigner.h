@@ -102,6 +102,21 @@ public:
     String getTokenError();
     String getTokenError(TokenInfo info);
 
+    /**
+     * Get the token expiration timestamp (seconds from midnight Jan 1, 1970).
+     * 
+     * @param info The TokenInfo structured data contains token info.
+     * @return token generation error String.
+     * 
+    */
+    unsigned long getExpiredTimestamp();
+
+    /**
+     * Refresh the access token
+     * 
+    */
+    void refreshToken();
+
     /** SD card config with GPIO pins.
      * 
      * @param ss -   SPI Chip/Slave Select pin.
@@ -130,11 +145,8 @@ private:
     bool requestTokens();
     void checkToken();
     void errorToString(int httpCode, std::string &buff);
-    bool reconnect(unsigned long dataTime);
     void sendTokenStatusCB();
-    std::string getToken(esp_signer_auth_token_type type);
-    std::string getCAFile();
-    int getCAFileStorage();
+    unsigned long getExpireMS();
     SignerConfig *getCfg();
 
 #if defined(ESP8266)

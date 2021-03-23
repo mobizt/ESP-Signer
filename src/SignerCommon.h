@@ -167,7 +167,8 @@ struct esp_signer_token_signer_resources_t
     int attempts = 0;
     bool tokenTaskRunning = false;
     unsigned long lastReqMillis = 0;
-    unsigned long preRefreshMillis = 5 * 60 * 1000;
+    unsigned long preRefreshSeconds = 60;
+    unsigned long expiredSeconds = 3600;
     unsigned long reqTO = 2000;
     std::string pk;
     size_t hashSize = 32; //SHA256 size (256 bits or 32 bytes)
@@ -232,7 +233,6 @@ struct esp_signer_cfg_t
 {
     struct esp_signer_service_account_t service_account;
     float time_zone = 0;
-    std::string host;
     struct esp_signer_auth_cert_t cert;
     struct esp_signer_token_signer_resources_t signer;
     struct esp_signer_cfg_int_t _int;

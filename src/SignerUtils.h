@@ -443,7 +443,6 @@ public:
                 delS(tmp);
             }
 
-
             if (pmax < beginPos)
                 pmax = beginPos;
             beginPos = payloadPos;
@@ -625,7 +624,6 @@ public:
 
         return nullptr;
     }
-
 
     void createDirs(std::string dirs, esp_signer_mem_storage_type storageType)
     {
@@ -1011,8 +1009,8 @@ public:
         if (time(nullptr) > default_ts && gmtOffset == config->_int.esp_signer_gmt_offset)
             return true;
 
-        if (WiFi.status() != WL_CONNECTED)
-            WiFi.reconnect();
+        if (config->_int.esp_signer_reconnect_wifi)
+            reconnect(0);
 
         time_t now = time(nullptr);
 
@@ -1237,7 +1235,6 @@ public:
     }
 #endif
 
-
     std::string getBoundary(size_t len)
     {
         char *tmp = strP(esp_signer_boundary_table);
@@ -1363,6 +1360,35 @@ public:
         info.host = host;
         delS(uri);
         delS(host);
+    }
+
+    bool reconnect(unsigned long dataTime)
+    {
+
+        bool status = WiFi.status() == WL_CONNECTED;
+
+        if (dataTime > 0)
+        {
+            if (millis() - dataTime > 30000)
+                return false;
+        }
+
+        if (!status)
+        {
+
+            if (config->_int.esp_signer_reconnect_wifi)
+            {
+                if (millis() - config->_int.esp_signer_last_reconnect_millis > config->_int.esp_signer_reconnect_tmo)
+                {
+                    WiFi.reconnect();
+                    config->_int.esp_signer_last_reconnect_millis = millis();
+                }
+            }
+
+            status = WiFi.status() == WL_CONNECTED;
+        }
+
+        return status;
     }
 
 private:

@@ -1,9 +1,9 @@
-# Google OAuth2.0 Access Token generation Arduino Library v1.0.0
+# Google OAuth2.0 Access Token generation Arduino Library v1.0.1
 
 
 This is the library will create the OAuth2.0 access token used in the Google API's http request (REST).
 
-The Service Account credentials e.g. project host, project id, email and private key which are available in the service account key file will be used.
+The Service Account credentials i.e. project_id, client_email and private_key which are available in the service account key file will be used.
 
 This library supports ESP8266 and ESP32 MCU from Espressif. 
 

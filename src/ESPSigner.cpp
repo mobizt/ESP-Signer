@@ -67,14 +67,6 @@ void ESP_Signer::begin(SignerConfig *cfg)
     if (tokenSigninDataReady())
         config->signer.tokens.token_type = esp_signer_token_type_oauth2_access_token;
 
-    struct esp_signer_url_info_t uinfo;
-
-    if (config->host.length() > 0)
-    {
-        ut->getUrlInfo(config->host.c_str(), uinfo);
-        config->host = uinfo.host;
-    }
-
     if (strlen_P(config->cert.data))
         config->_int.esp_signer_caCert = config->cert.data;
 
@@ -215,7 +207,7 @@ bool ESP_Signer::handleToken()
     if (!config)
         return false;
 
-    if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && (millis() > config->signer.tokens.expires - config->signer.preRefreshMillis || config->signer.tokens.expires == 0))
+    if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && (time(nullptr) > config->signer.tokens.expires - config->signer.preRefreshSeconds || config->signer.tokens.expires == 0))
     {
 
         if (config->signer.step == esp_signer_jwt_generation_step_begin)
@@ -308,11 +300,9 @@ void ESP_Signer::tokenProcessingTask()
 
             yield();
         }
-
-        vTaskDelete(NULL);
-
         _this->config->_int.token_processing_task_handle = NULL;
         _this->config->signer.tokenTaskRunning = false;
+        vTaskDelete(NULL);
     };
 
     char *taskname = ut->strP(esp_signer_pgm_str_20);
@@ -535,6 +525,9 @@ void ESP_Signer::sendTokenStatusCB()
 
 bool ESP_Signer::handleTokenResponse()
 {
+    if (config->_int.esp_signer_reconnect_wifi)
+        ut->reconnect(0);
+
     if (WiFi.status() != WL_CONNECTED)
         return false;
 
@@ -566,7 +559,7 @@ bool ESP_Signer::handleTokenResponse()
 #endif
     while (stream->connected() && stream->available() == 0)
     {
-        if (!reconnect(dataTime))
+        if (!ut->reconnect(dataTime))
         {
             if (stream)
                 if (stream->connected())
@@ -589,7 +582,11 @@ bool ESP_Signer::handleTokenResponse()
         {
             while (!complete)
             {
+                if (config->_int.esp_signer_reconnect_wifi)
+                    ut->reconnect(0);
+
                 delay(0);
+                
                 if (WiFi.status() != WL_CONNECTED)
                 {
                     if (stream)
@@ -785,7 +782,12 @@ bool ESP_Signer::createJWT()
         ut->delS(tmp);
 
         tmp = ut->strP(esp_signer_pgm_str_47);
-        config->signer.json->add(tmp, (int)(now + 60 * 60));
+
+        if (config->signer.expiredSeconds > 3600)
+            config->signer.json->add(tmp, (int)(now + 3600));
+        else
+            config->signer.json->add(tmp, (int)(now + config->signer.expiredSeconds));
+
         ut->delS(tmp);
 
         if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token)
@@ -991,37 +993,12 @@ bool ESP_Signer::createJWT()
     return true;
 }
 
-bool ESP_Signer::reconnect(unsigned long dataTime)
-{
-
-    bool status = WiFi.status() == WL_CONNECTED;
-
-    if (dataTime > 0)
-    {
-        if (millis() - dataTime > 30000)
-            return false;
-    }
-
-    if (!status)
-    {
-
-        if (config->_int.esp_signer_reconnect_wifi)
-        {
-            if (millis() - config->_int.esp_signer_last_reconnect_millis > config->_int.esp_signer_reconnect_tmo)
-            {
-                WiFi.reconnect();
-                config->_int.esp_signer_last_reconnect_millis = millis();
-            }
-        }
-
-        status = WiFi.status() == WL_CONNECTED;
-    }
-
-    return status;
-}
-
 bool ESP_Signer::requestTokens()
 {
+
+    if (config->_int.esp_signer_reconnect_wifi)
+        ut->reconnect(0);
+
     if (WiFi.status() != WL_CONNECTED)
         return false;
 
@@ -1155,7 +1132,7 @@ bool ESP_Signer::requestTokens()
                 config->signer.json->get(*config->signer.data, tmp);
                 ut->delS(tmp);
                 if (config->signer.data->success)
-                    config->signer.tokens.expires = millis() + (1000 * atoi(config->signer.data->stringValue.c_str()));
+                    config->signer.tokens.expires = time(nullptr) + atoi(config->signer.data->stringValue.c_str());
             }
             return handleSignerError(0);
         }
@@ -1170,7 +1147,7 @@ void ESP_Signer::checkToken()
     if (!config)
         return;
 
-    if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && (millis() > config->signer.tokens.expires - config->signer.preRefreshMillis || config->signer.tokens.expires == 0))
+    if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && (time(nullptr) > config->signer.tokens.expires - config->signer.preRefreshSeconds || config->signer.tokens.expires == 0))
         handleToken();
 }
 
@@ -1274,6 +1251,17 @@ String ESP_Signer::getTokenError(TokenInfo info)
 String ESP_Signer::getTokenError()
 {
     return getTokenError(tokenInfo);
+}
+
+unsigned long ESP_Signer::getExpiredTimestamp()
+{
+    return config->signer.tokens.expires;
+}
+
+void ESP_Signer::refreshToken()
+{
+    config->signer.tokens.expires = 0;
+    checkToken();
 }
 
 void ESP_Signer::errorToString(int httpCode, std::string &buff)
@@ -1408,35 +1396,6 @@ void ESP_Signer::errorToString(int httpCode, std::string &buff)
     default:
         return;
     }
-}
-
-std::string ESP_Signer::getToken(esp_signer_auth_token_type type)
-{
-    if (!config)
-        return "";
-
-    if (type == esp_signer_token_type_oauth2_access_token)
-        return config->signer.tokens.access_token;
-    else
-        return "";
-}
-
-SignerConfig *ESP_Signer::getCfg()
-{
-    return config;
-}
-
-std::string ESP_Signer::getCAFile()
-{
-    if (!config)
-        return "";
-    return config->cert.file;
-}
-int ESP_Signer::getCAFileStorage()
-{
-    if (!config)
-        return 0;
-    return config->cert.file_storage;
 }
 
 ESP_Signer Signer = ESP_Signer();

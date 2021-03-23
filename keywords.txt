@@ -19,6 +19,8 @@ getTokenType    KEYWORD2
 getTokenStatus  KEYWORD2
 getTokenError   KEYWORD2
 sdBegin KEYWORD2
+getExpiredTimestamp KEYWORD2
+refreshToken    KEYWORD2
 
 
 ######################################

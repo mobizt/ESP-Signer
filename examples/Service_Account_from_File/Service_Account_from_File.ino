@@ -11,9 +11,6 @@
 #define WIFI_SSID "WiFi SSID"
 #define WIFI_PASSWORD "WIFi PSK"
 
-#define PROJECT_HOST "The project host without cheme (https://)"
-
-
 SignerConfig config;
 
 void tokenStatusCallback(TokenInfo info);
@@ -24,6 +21,8 @@ void setup()
     Serial.begin(115200);
     Serial.println();
     Serial.println();
+
+    WiFi.setAutoReconnect(true);
 
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     Serial.print("Connecting to Wi-Fi");
@@ -37,9 +36,6 @@ void setup()
     Serial.println(WiFi.localIP());
     Serial.println();
 
-    /* Assign the project host (required) */
-    config.host = PROJECT_HOST;
-
     /* The file systems for flash and SD/SDMMC can be changed in FS_Config.h. */
 
     /** Assign the sevice account JSON file and the file storage type (required) 
@@ -47,6 +43,16 @@ void setup()
     */
     config.service_account.json.path = "/service_account_file.json"; //change this for your json file
     config.service_account.json.storage_type = esp_signer_mem_storage_type_flash; //or esp_signer_mem_storage_type_sd
+
+    /** Expired period in seconds (optional). 
+     * Default is 3600 sec.
+     * This may not afftect the expiry time of generated access token.
+    */
+    config.signer.expiredSeconds = 3600;
+
+    /* Seconds to refresh the token before expiry time (optional). Default is 60 sec.*/
+    config.signer.preRefreshSeconds = 60;
+
 
     /** Assign the API scopes (required) 
      * Use space or comma to separate the scope.
@@ -58,13 +64,19 @@ void setup()
 
     /* Create token */
     Signer.begin(&config);
+
+    //The WiFi connection can be processed before or after Signer.begin
+
+    //Call Signer.getExpiredTimestamp() to get the token expired timestamp (seconds from midnight Jan 1, 1970)
+
+    //Call Signer.refreshToken() to force refresh the token.
 }
 
 void loop()
 {
     delay(1000);
 
-    /* Check to status and also refresh the access token */
+    /* Check for token generation ready state and also refresh the access token if it expired */
     bool ready = Signer.tokenReady();
 }
 

@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.0
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.2
  * 
  * This library use RS256 for signing algorithm.
  * 
@@ -7,7 +7,7 @@
  * 
  * This library supports Espressif ESP8266 and ESP32
  * 
- * Created March 23, 2021
+ * Created March 25, 2021
  * 
  * This work is a part of Firebase ESP Client library
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
@@ -107,8 +107,8 @@ bool ESP_Signer::parseSAFile()
         if (config->_int.esp_signer_file)
         {
             clearSA();
-            config->signer.json = new MB_Json();
-            config->signer.data = new MB_JsonData();
+            config->signer.json = new FirebaseJson();
+            config->signer.data = new FirebaseJsonData();
             char *tmp = nullptr;
 
             size_t len = config->_int.esp_signer_file.size();
@@ -726,8 +726,8 @@ bool ESP_Signer::createJWT()
         config->signer.tokens.error.message.clear();
         sendTokenStatusCB();
 
-        config->signer.json = new MB_Json();
-        config->signer.data = new MB_JsonData();
+        config->signer.json = new FirebaseJson();
+        config->signer.data = new FirebaseJsonData();
 
         unsigned long now = time(nullptr);
 
@@ -745,7 +745,7 @@ bool ESP_Signer::createJWT()
         ut->delS(tmp);
         ut->delS(tmp2);
 
-        config->signer.json->_tostr(config->signer.header);
+        config->signer.json->int_tostr(config->signer.header);
         size_t len = ut->base64EncLen(config->signer.header.length());
         char *buf = ut->newS(len);
         ut->encodeBase64Url(buf, (unsigned char *)config->signer.header.c_str(), config->signer.header.length());
@@ -815,7 +815,7 @@ bool ESP_Signer::createJWT()
             ut->delS(tmp);
         }
 
-        config->signer.json->_tostr(config->signer.payload);
+        config->signer.json->int_tostr(config->signer.payload);
         len = ut->base64EncLen(config->signer.payload.length());
         buf = ut->newS(len);
         ut->encodeBase64Url(buf, (unsigned char *)config->signer.payload.c_str(), config->signer.payload.length());
@@ -1021,8 +1021,8 @@ bool ESP_Signer::requestTokens()
     config->signer.wcs->setInsecure();
     config->signer.wcs->setBufferSizes(512, 512);
 #endif
-    config->signer.json = new MB_Json();
-    config->signer.data = new MB_JsonData();
+    config->signer.json = new FirebaseJson();
+    config->signer.data = new FirebaseJsonData();
 
     std::string host;
     ut->appendP(host, esp_signer_pgm_str_48);
@@ -1111,6 +1111,11 @@ bool ESP_Signer::requestTokens()
         }
 
         config->signer.tokens.error = error;
+        tokenInfo.status = config->signer.tokens.status;
+        tokenInfo.type = config->signer.tokens.token_type;
+        tokenInfo.error = config->signer.tokens.error;
+        if (error.code != 0)
+            sendTokenStatusCB();
 
         if (error.code == 0)
         {

@@ -36,7 +36,7 @@
 #include <functional>
 
 #include <FS.h>
-#include "json/MB_Json.h"
+#include "json/FirebaseJson.h"
 
 #if defined(ESP32)
 #include <WiFi.h>
@@ -193,8 +193,8 @@ struct esp_signer_token_signer_resources_t
 #elif defined(ESP8266)
     WiFiClientSecure *wcs = nullptr;
 #endif
-    MB_Json *json = nullptr;
-    MB_JsonData *data = nullptr;
+    FirebaseJson *json = nullptr;
+    FirebaseJsonData *data = nullptr;
     struct esp_signer_auth_token_info_t tokens;
 };
 

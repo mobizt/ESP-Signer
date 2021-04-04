@@ -1,6 +1,6 @@
 
 /**
- * Created March 22, 2021
+ * Created April 4, 2021
  * 
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
  * 
@@ -55,6 +55,7 @@
 #define WIFI_RECONNECT_TIMEOUT 10000
 #define MAX_EXCHANGE_TOKEN_ATTEMPTS 5
 #define ESP_DEFAULT_TS 1510644967
+#define ESP_SIGNER_DEFAULT_RESPONSE_BUFFER_SIZE 2560
 
 enum esp_signer_mem_storage_type
 {

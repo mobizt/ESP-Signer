@@ -21,6 +21,7 @@ getTokenError   KEYWORD2
 sdBegin KEYWORD2
 getExpiredTimestamp KEYWORD2
 refreshToken    KEYWORD2
+setSystemTime   KEYWORD2
 
 
 ######################################

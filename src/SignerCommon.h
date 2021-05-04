@@ -54,7 +54,7 @@
 #define MAX_REDIRECT 5
 #define WIFI_RECONNECT_TIMEOUT 10000
 #define MAX_EXCHANGE_TOKEN_ATTEMPTS 5
-#define ESP_DEFAULT_TS 1510644967
+#define ESP_DEFAULT_TS 1618971013
 #define ESP_SIGNER_DEFAULT_RESPONSE_BUFFER_SIZE 2560
 
 enum esp_signer_mem_storage_type
@@ -123,6 +123,7 @@ struct esp_signer_auth_token_info_t
     std::string jwt;
     std::string scope;
     unsigned long expires = 0;
+    unsigned long last_millis = 0;
     esp_signer_auth_token_type token_type = esp_signer_token_type_undefined;
     esp_signer_auth_token_status status = esp_signer_token_status_uninitialized;
     struct esp_signer_auth_token_error_t error;

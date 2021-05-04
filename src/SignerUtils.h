@@ -1,9 +1,9 @@
 /**
- * Util class, SignerUtils.h version 1.0.0
+ * Util class, SignerUtils.h version 1.0.1
  * 
  * This library supports Espressif ESP8266 and ESP32
  * 
- * Created March 23, 2021
+ * Created May 4, 2021
  * 
  * This work is a part of Firebase ESP Client library
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
@@ -1389,6 +1389,12 @@ public:
         }
 
         return status;
+    }
+
+    int setTimestamp(time_t ts)
+    {
+        struct timeval tm = {ts, 0}; // sec, us
+        return settimeofday((const timeval *)&tm, 0);
     }
 
 private:

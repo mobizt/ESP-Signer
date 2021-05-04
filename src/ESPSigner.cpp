@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.3
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.4
  * 
  * This library use RS256 for signing algorithm.
  * 
@@ -7,7 +7,7 @@
  * 
  * This library supports Espressif ESP8266 and ESP32
  * 
- * Created April 4, 2021
+ * Created May 4, 2021
  * 
  * This work is a part of Firebase ESP Client library
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
@@ -206,6 +206,10 @@ bool ESP_Signer::handleToken()
 {
     if (!config)
         return false;
+
+    //if the time was set (changed) after token has been generated, update its expiration
+    if (config->signer.tokens.expires > 0 && config->signer.tokens.expires < ESP_DEFAULT_TS && time(nullptr) > ESP_DEFAULT_TS)
+        config->signer.tokens.expires += time(nullptr) - (millis() - config->signer.tokens.last_millis) / 1000 - 60;
 
     if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && (time(nullptr) > config->signer.tokens.expires - config->signer.preRefreshSeconds || config->signer.tokens.expires == 0))
     {
@@ -1137,7 +1141,12 @@ bool ESP_Signer::requestTokens()
                 config->signer.json->get(*config->signer.data, tmp);
                 ut->delS(tmp);
                 if (config->signer.data->success)
-                    config->signer.tokens.expires = time(nullptr) + atoi(config->signer.data->stringValue.c_str());
+                {
+                    time_t ts = time(nullptr);
+                    unsigned long ms = millis();
+                    config->signer.tokens.expires = ts + atoi(config->signer.data->stringValue.c_str());
+                    config->signer.tokens.last_millis = ms;
+                }
             }
             return handleSignerError(0);
         }
@@ -1151,6 +1160,10 @@ void ESP_Signer::checkToken()
 {
     if (!config)
         return;
+
+    //if the time was set (changed) after token has been generated, update its expiration
+    if (config->signer.tokens.expires > 0 && config->signer.tokens.expires < ESP_DEFAULT_TS && time(nullptr) > ESP_DEFAULT_TS)
+        config->signer.tokens.expires += time(nullptr) - (millis() - config->signer.tokens.last_millis) / 1000 - 60;
 
     if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && (time(nullptr) > config->signer.tokens.expires - config->signer.preRefreshSeconds || config->signer.tokens.expires == 0))
         handleToken();
@@ -1401,6 +1414,11 @@ void ESP_Signer::errorToString(int httpCode, std::string &buff)
     default:
         return;
     }
+}
+
+bool ESP_Signer::setSystemTime(time_t ts)
+{
+    return ut->setTimestamp(ts) == 0;
 }
 
 ESP_Signer Signer = ESP_Signer();

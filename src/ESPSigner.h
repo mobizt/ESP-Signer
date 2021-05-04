@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.3
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.4
  * 
  * This library use RS256 for signing algorithm.
  * 
@@ -7,7 +7,7 @@
  * 
  * This library supports Espressif ESP8266 and ESP32
  * 
- * Created April 4, 2021
+ * Created May 4, 2021
  * 
  * This work is a part of Firebase ESP Client library
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
@@ -39,7 +39,6 @@
 
 #include <Arduino.h>
 #include "SignerUtils.h"
-
 
 class ESP_Signer
 {
@@ -116,6 +115,13 @@ public:
      * 
     */
     void refreshToken();
+
+    /** Set system time with timestamp.
+     * 
+     * @param ts timestamp in seconds from midnight Jan 1, 1970.
+     * @return Boolean type status indicates the success of the operation.
+    */
+    bool setSystemTime(time_t ts);
 
     /** SD card config with GPIO pins.
      * 

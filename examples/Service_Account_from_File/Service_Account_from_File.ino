@@ -62,6 +62,9 @@ void setup()
     /** Assign the callback function for token ggeneration status (optional) */
     config.token_status_callback = tokenStatusCallback;
 
+    //To set the device time without NTP time acquisition.
+    //Signer.setSystemTime(<timestamp>);
+
     /* Create token */
     Signer.begin(&config);
 

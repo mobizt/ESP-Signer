@@ -1,6 +1,6 @@
 {
   "name": "ESP Signer",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "keywords": "communication, REST, esp32, esp8266, arduino",
   "description": "The Google OAuth2.0 access token generation for Google REST API's http request.",
   "repository": {

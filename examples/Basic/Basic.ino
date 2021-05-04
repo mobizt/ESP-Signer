@@ -14,9 +14,9 @@
 /** These credentials are taken from Service Account key file (JSON)
  * https://cloud.google.com/iam/docs/service-accounts
 */
-#define PROJECT_ID "The project ID" //Taken from "project_id" key in JSON file.
-#define CLIENT_EMAIL "Client Email" //Taken from "client_email" key in JSON file.
-#define PRIVATE_KEY_ID "Private key ID" //Taken from "private_key_id" in JSON file.
+#define PROJECT_ID "The project ID"                                                             //Taken from "project_id" key in JSON file.
+#define CLIENT_EMAIL "Client Email"                                                             //Taken from "client_email" key in JSON file.
+#define PRIVATE_KEY_ID "Private key ID"                                                         //Taken from "private_key_id" in JSON file.
 const char PRIVATE_KEY[] PROGMEM = "-----BEGIN PRIVATE KEY-----\\n-----END PRIVATE KEY-----\n"; //Taken from "private_key" key in JSON file.
 
 SignerConfig config;
@@ -65,6 +65,9 @@ void setup()
 
     /** Assign the callback function for token ggeneration status (optional) */
     config.token_status_callback = tokenStatusCallback;
+
+    //To set the device time without NTP time acquisition.
+    //Signer.setSystemTime(<timestamp>);
 
     /* Create token */
     Signer.begin(&config);

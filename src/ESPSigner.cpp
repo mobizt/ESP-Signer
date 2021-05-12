@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.4
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.5
  * 
  * This library use RS256 for signing algorithm.
  * 
@@ -7,7 +7,7 @@
  * 
  * This library supports Espressif ESP8266 and ESP32
  * 
- * Created May 4, 2021
+ * Created May 12, 2021
  * 
  * This work is a part of Firebase ESP Client library
  * Copyright (c) 2021 K. Suwatchai (Mobizt)

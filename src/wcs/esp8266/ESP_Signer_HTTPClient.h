@@ -1,5 +1,5 @@
 /**
- * HTTP Client wrapper v1.0.0
+ * HTTP Client wrapper v1.0.1
  * 
  * The MIT License (MIT)
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
@@ -30,6 +30,13 @@
 #include <Arduino.h>
 #include <core_version.h>
 #include <time.h>
+
+#ifdef __GNUC__
+#if __GNUC__ > 4 || __GNUC__ == 10
+#include <string>
+#define ESP8266_CORE_SDK_V3_X_X
+#endif
+#endif
 
 #ifndef ARDUINO_ESP8266_GIT_VER
 #error Your ESP8266 Arduino Core SDK is outdated, please update. From Arduino IDE go to Boards Manager and search 'esp8266' then select the latest version.

@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.6
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.7
  * 
  * This library use RS256 for signing algorithm.
  * 

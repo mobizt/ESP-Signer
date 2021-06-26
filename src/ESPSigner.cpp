@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.6
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.7
  * 
  * This library use RS256 for signing algorithm.
  * 
@@ -749,7 +749,7 @@ bool ESP_Signer::createJWT()
         ut->delS(tmp);
         ut->delS(tmp2);
 
-        config->signer.json->int_tostr(config->signer.header);
+        config->signer.header = config->signer.json->raw();
         size_t len = ut->base64EncLen(config->signer.header.length());
         char *buf = ut->newS(len);
         ut->encodeBase64Url(buf, (unsigned char *)config->signer.header.c_str(), config->signer.header.length());
@@ -819,7 +819,7 @@ bool ESP_Signer::createJWT()
             ut->delS(tmp);
         }
 
-        config->signer.json->int_tostr(config->signer.payload);
+        config->signer.payload = config->signer.json->raw();
         len = ut->base64EncLen(config->signer.payload.length());
         buf = ut->newS(len);
         ut->encodeBase64Url(buf, (unsigned char *)config->signer.payload.c_str(), config->signer.payload.length());

@@ -41,6 +41,9 @@ void setup()
     /** Assign the sevice account JSON file and the file storage type (required) 
      * https://cloud.google.com/iam/docs/service-accounts
     */
+
+    // See https://github.com/mobizt/ESP-Signer#how-to-create-service-account-private-key
+
     config.service_account.json.path = "/service_account_file.json"; //change this for your json file
     config.service_account.json.storage_type = esp_signer_mem_storage_type_flash; //or esp_signer_mem_storage_type_sd
 
@@ -77,10 +80,17 @@ void setup()
 
 void loop()
 {
-    delay(1000);
 
     /* Check for token generation ready state and also refresh the access token if it expired */
     bool ready = Signer.tokenReady();
+    if (ready)
+    {
+        int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - time(nullptr);
+
+        Serial.print("Remaining seconds to refresh the token, ");
+        Serial.println(t);
+        delay(1000);
+    }
 }
 
 void tokenStatusCallback(TokenInfo info)

@@ -1,8 +1,11 @@
 /**
- * HTTP Client wrapper v1.0.1
+ * ESP Signer TCP Client v1.0.0
+ * 
+ * Created December 11, 2021
  * 
  * The MIT License (MIT)
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
+ * 
  * 
  * Permission is hereby granted, free of charge, to any person returning a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -22,14 +25,18 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#ifndef ESP_SIGNER_HTTPClient_H
-#define ESP_SIGNER_HTTPClient_H
+#ifndef ESP_SIGNER_TCP_Client_H
+#define ESP_SIGNER_TCP_Client_H
 
 #ifdef ESP8266
 
 #include <Arduino.h>
 #include <core_version.h>
 #include <time.h>
+
+//__GNUC__
+//__GNUC_MINOR__
+//__GNUC_PATCHLEVEL__
 
 #ifdef __GNUC__
 #if __GNUC__ > 4 || __GNUC__ == 10
@@ -53,20 +60,49 @@
 
 #define FS_NO_GLOBALS
 #include <FS.h>
-#include <SD.h>
-#include <LittleFS.h>
 #include "FS_Config.h"
 
-#if __has_include(<WiFiEspAT.h>) || __has_include(<espduino.h>)
-#error WiFi UART bridge was not supported.
+#if defined DEFAULT_FLASH_FS
+#define FLASH_FS DEFAULT_FLASH_FS
+#endif
+
+#if defined DEFAULT_SD_FS
+#define SD_FS DEFAULT_SD_FS
+#endif
+
+#if defined(ESP_SIGNER_USE_PSRAM)
+#define FIREBASEJSON_USE_PSRAM
+#endif
+
+#include "./json/FirebaseJson.h"
+
+#if defined __has_include
+
+#if __has_include(<LwipIntfDev.h>)
+#include <LwipIntfDev.h>
+#endif
+
+#if __has_include(<ENC28J60lwIP.h>)
+#define INC_ENC28J60_LWIP
+#include <ENC28J60lwIP.h>
+#endif
+
+#if __has_include(<W5100lwIP.h>)
+#define INC_W5100_LWIP
+#include <W5100lwIP.h>
+#endif
+
+#if __has_include(<W5500lwIP.h>)
+#define INC_W5500_LWIP
+#include <W5500lwIP.h>
+#endif
+
 #endif
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#define FLASH_FS DEFAULT_FLASH_FS
-#define SD_FS DEFAULT_SD_FS
 
-#include "wcs/ESP_Signer_HTTPCode.h"
+#include "wcs/HTTPCode.h"
 
 struct esp_signer_sd_config_info_t
 {
@@ -76,36 +112,64 @@ struct esp_signer_sd_config_info_t
   int ss = -1;
 };
 
-class ESP_Signer_HTTPClient
+class ESP_SIGNER_TCP_Client
 {
 
+  friend class FirebaseData;
+  friend class ESP_SIGNER_RTDB;
+  friend class ESP_SIGNER_CM;
+  friend class ESP_SIGNER_CloudStorage;
+  friend class UtilsClass;
 
 public:
-  ESP_Signer_HTTPClient();
-  ~ESP_Signer_HTTPClient();
+  ESP_SIGNER_TCP_Client();
+  ~ESP_SIGNER_TCP_Client();
 
+  /**
+   * Initialization of new http connection.
+   * \param host - Host name without protocols.
+   * \param port - Server's port.
+   * \return True as default.
+   * If no certificate string provided, use (const char*)NULL to CAcert param 
+  */
   bool begin(const char *host, uint16_t port);
 
+  /**
+   *  Check the http connection status.
+   * \return True if connected.
+  */
   bool connected(void);
 
-  int send(const char *header, const char *payload);
+  /**
+    * Establish TCP connection when required and send data.
+    * \param data - The data to send.
+    * \param len - The length of data to send.
+    * 
+    * \return TCP status code, Return zero if new TCP connection and data sent.
+    */
+  int send(const char *data, size_t len = 0);
 
-  bool send(const char *header);
-
+  /**
+   * Get the WiFi client pointer.
+   * \return WiFi client pointer.
+  */
   WiFiClient *stream(void);
 
   void setCACert(const char *caCert);
-  void setCACertFile(const char* caCertFile, uint8_t storageType, struct esp_signer_sd_config_info_t sd_config);
+  void setCACertFile(const char *caCertFile, uint8_t storageType, struct esp_signer_sd_config_info_t sd_config);
   bool connect(void);
-
 
 private:
   std::unique_ptr<ESP_SIGNER_ESP_SSL_CLIENT> _wcs = std::unique_ptr<ESP_SIGNER_ESP_SSL_CLIENT>(new ESP_SIGNER_ESP_SSL_CLIENT());
-  std::string _host = "";
+  MBSTRING _host;
   uint16_t _port = 0;
-  unsigned long timeout = ESP_SIGNER_DEFAULT_TCP_TIMEOUT;
 
-  std::string _CAFile = "";
+  //Actually Arduino base Stream (char read) timeout.
+  //This will override internally by WiFiClientSecureCtx::_connectSSL
+  //to 5000 after SSL handshake was done with success.
+  unsigned long timeout = 10 * 1000;
+
+  MBSTRING _CAFile;
   uint8_t _CAFileStoreageType = 0;
   int _certType = -1;
   uint8_t _sdPin = 15;
@@ -115,8 +179,11 @@ private:
   bool fragmentable = false;
   int chunkSize = 1024;
   bool mflnChecked = false;
+  X509List *x509 = nullptr;
+
+  void release();
 };
 
 #endif /* ESP8266 */
 
-#endif /* ESP_Signer_HTTPClient_H */
+#endif /* ESP_SIGNER_TCP_Client_H */

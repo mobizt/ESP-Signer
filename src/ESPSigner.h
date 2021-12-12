@@ -1,13 +1,13 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.7
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.1.0
  * 
- * This library use RS256 for signing algorithm.
+ * This library used RS256 for signing algorithm.
  * 
  * The signed JWT token will be generated and exchanged with the access token in the final generating process.
  * 
  * This library supports Espressif ESP8266 and ESP32
  * 
- * Created June 5, 2021
+ * Created November 12, 2021
  * 
  * This work is a part of Firebase ESP Client library
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
@@ -55,6 +55,12 @@ public:
      * 
     */
     void begin(SignerConfig *config);
+
+    /**
+     * End the Access token generation
+     * 
+    */
+    void end();
 
     /**
      * Check the token ready state and trying to re-generate the token when expired.
@@ -105,8 +111,7 @@ public:
     /**
      * Get the token expiration timestamp (seconds from midnight Jan 1, 1970).
      * 
-     * @param info The TokenInfo structured data contains token info.
-     * @return token generation error String.
+     * @return timestamp.
      * 
     */
     unsigned long getExpiredTimestamp();
@@ -124,6 +129,7 @@ public:
     */
     bool setSystemTime(time_t ts);
 
+
     /** SD card config with GPIO pins.
      * 
      * @param ss -   SPI Chip/Slave Select pin.
@@ -134,26 +140,46 @@ public:
     */
     bool sdBegin(int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
 
+    /** Initialize the SD_MMC card (ESP32 only).
+  *
+  * @param mountpoint The mounting point.
+  * @param mode1bit Allow 1 bit data line (SPI mode).
+  * @param format_if_mount_failed Format SD_MMC card if mount failed.
+  * @return The boolean value indicates the success of operation.
+ */
+    bool sdMMCBegin(const char *mountpoint = "/sdcard", bool mode1bit = false, bool format_if_mount_failed = false);
+
 private:
     SignerUtils *ut = nullptr;
     SignerConfig *config = nullptr;
     esp_signer_callback_function_t _cb = nullptr;
     struct token_info_t tokenInfo;
+    
+    bool authenticated = false;
     bool _token_processing_task_enable = false;
-    bool tokenSigninDataReady();
+    bool _token_processing_task_end_request = false;
+
+    unsigned long unauthen_millis = 0;
+    unsigned long unauthen_pause_duration = 3000;
+    
+
+    bool tokenSAReady();
     bool parseSAFile();
     bool handleToken();
     void clearSA();
     void setTokenError(int code);
-    bool handleSignerError(int code);
-    bool handleTokenResponse();
+    bool handleSignerError(int code, int httpCode = 0);
+    bool parseJsonResponse(PGM_P key_path);
+    bool handleTokenResponse(int &httpCode);
     void tokenProcessingTask();
     bool createJWT();
     bool requestTokens();
+    void getExpiration(const char *exp);
     void checkToken();
-    void errorToString(int httpCode, std::string &buff);
+    void errorToString(int httpCode, MBSTRING &buff);
     void sendTokenStatusCB();
     unsigned long getExpireMS();
+    bool isExpired();
     SignerConfig *getCfg();
 
 #if defined(ESP8266)

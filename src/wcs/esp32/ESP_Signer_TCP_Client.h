@@ -1,11 +1,12 @@
 /**
- * HTTP Client wrapper v1.0.0
+ * ESP Signer TCP Client v1.0.0
+ * 
+ * Created December 11, 2021
  * 
  * The MIT License (MIT)
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
  * 
- * HTTPClient Arduino library for ESP32
- *
+ * 
  * Copyright (c) 2015 Markus Sattler. All rights reserved.
  * This file is part of the HTTPClient for Arduino.
  * Port to ESP32 by Evandro Luis Copercini (2017), 
@@ -27,8 +28,8 @@
  *
 */
 
-#ifndef ESP_SIGNER_HTTPClient32_H
-#define ESP_SIGNER_HTTPClient32_H
+#ifndef ESP_SIGNER_TCP_Client_H
+#define ESP_SIGNER_TCP_Client_H
 
 #ifdef ESP32
 
@@ -37,11 +38,15 @@
 #include <FS.h>
 #include <SPIFFS.h>
 #include <SD.h>
+#include <ETH.h>
 #include "FS_Config.h"
 #include <WiFiClientSecure.h>
-#if __has_include(<WiFiEspAT.h>) || __has_include(<espduino.h>)
-#error WiFi UART bridge was not supported.
+
+#if defined(ESP_SIGNER_USE_PSRAM)
+#define FIREBASEJSON_USE_PSRAM
 #endif
+#include "./json/FirebaseJson.h"
+
 
 #if __has_include(<esp_idf_version.h>)
 #include <esp_idf_version.h>
@@ -49,11 +54,17 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#if defined DEFAULT_FLASH_FS
 #define FLASH_FS DEFAULT_FLASH_FS
+#endif
+#if defined DEFAULT_SD_FS
 #define SD_FS DEFAULT_SD_FS
+#endif
 #define FORMAT_FLASH FORMAT_FLASH_IF_MOUNT_FAILED
 
-#include "wcs/ESP_Signer_HTTPCode.h"
+#include "wcs/HTTPCode.h"
+
+static const char esp_idf_branch_str[] PROGMEM = "release/v";
 
 struct esp_signer_sd_config_info_t
 {
@@ -61,15 +72,45 @@ struct esp_signer_sd_config_info_t
   int miso = -1;
   int mosi = -1;
   int ss = -1;
+  const char *sd_mmc_mountpoint = "";
+  bool sd_mmc_mode1bit = false;
+  bool sd_mmc_format_if_mount_failed = false;
 };
 
-class ESP_Signer_HTTPClient32
+//The derived class to fix the memory leaks issue
+//https://github.com/espressif/arduino-esp32/issues/5480
+class ESP_SIGNER_WCS : public WiFiClientSecure
+{
+public:
+  ESP_SIGNER_WCS(){};
+  ~ESP_SIGNER_WCS(){};
+
+  int _connect(const char *host, uint16_t port, unsigned long timeout)
+  {
+    _timeout = timeout;
+
+    if (connect(host, port) == 0)
+    {
+      if (_CA_cert != NULL)
+        mbedtls_x509_crt_free(&sslclient->ca_cert);
+      return 0;
+    }
+    _connected = true;
+    return 1;
+  }
+};
+
+class ESP_SIGNER_TCP_Client
 {
 
+  friend class FirebaseData;
+  friend class ESP_SIGNER_RTDB;
+  friend class ESP_SIGNER_CM;
+  friend class UtilsClass;
 
 public:
-  ESP_Signer_HTTPClient32();
-  ~ESP_Signer_HTTPClient32();
+  ESP_SIGNER_TCP_Client();
+  ~ESP_SIGNER_TCP_Client();
 
   /**
    * Initialization of new http connection.
@@ -87,21 +128,13 @@ public:
   bool connected();
 
   /**
-   * Establish http connection if header provided and send it, send payload if provided.
-   * \param header - The header string (constant chars array).
-   * \param payload - The payload string (constant chars array), optional.
-   * \return http status code, Return zero if new http connection and header and/or payload sent
-   * with no error or no header and payload provided. If obly payload provided, no new http connection was established.
-  */
-  int send(const char *header, const char *payload);
-
-  /**
-   * Send extra header without making new http connection (if send with header has been called)
-   * \param header - The header string (constant chars array).
-   * \return True if header sending success.
-   * Need to call send with header first. 
-  */
-  bool send(const char *header);
+    * Establish TCP connection when required and send data.
+    * \param data - The data to send.
+    * \param len - The length of data to send.
+    * 
+    * \return TCP status code, Return zero if new TCP connection and data sent.
+    */
+  int send(const char *data, size_t len = 0);
 
   /**
    * Get the WiFi client pointer.
@@ -120,18 +153,21 @@ public:
   void setCACert(const char *caCert);
   void setCACertFile(const char *caCertFile, uint8_t storageType, struct esp_signer_sd_config_info_t sd_config);
 
-protected:
-  std::unique_ptr<WiFiClientSecure> _wcs = std::unique_ptr<WiFiClientSecure>(new WiFiClientSecure());
-  std::string _host = "";
+private:
+  std::unique_ptr<ESP_SIGNER_WCS> _wcs = std::unique_ptr<ESP_SIGNER_WCS>(new ESP_SIGNER_WCS());
+  MBSTRING _host;
   uint16_t _port = 0;
-  unsigned long timeout = ESP_SIGNER_DEFAULT_TCP_TIMEOUT;
 
-  std::string _CAFile = "";
+  //lwIP socket connection and ssl handshake timeout
+  unsigned long timeout = 10 * 1000;
+
+  MBSTRING _CAFile;
   uint8_t _CAFileStoreageType = 0;
   int _certType = -1;
   bool _clockReady = false;
+  void release();
 };
 
 #endif /* ESP32 */
 
-#endif /* ESP_Signer_HTTPClient_H */
+#endif /* ESP_SIGNER_TCP_Client_H */

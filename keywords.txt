@@ -13,6 +13,7 @@ Signer  KEYWORD1
 ###############################################
 
 begin   KEYWORD2
+end KEYWORD2
 tokenReady  KEYWORD2
 accessToken KEYWORD2
 getTokenType    KEYWORD2
@@ -22,6 +23,8 @@ sdBegin KEYWORD2
 getExpiredTimestamp KEYWORD2
 refreshToken    KEYWORD2
 setSystemTime   KEYWORD2
+sdBegin KEYWORD2
+sdMMCBegin  KEYWORD2
 
 
 ######################################

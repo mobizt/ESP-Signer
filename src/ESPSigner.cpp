@@ -1,13 +1,13 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.0.7
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.1.0
  * 
- * This library use RS256 for signing algorithm.
+ * This library used RS256 for signing algorithm.
  * 
  * The signed JWT token will be generated and exchanged with the access token in the final generating process.
  * 
  * This library supports Espressif ESP8266 and ESP32
  * 
- * Created June 5, 2021
+ * Created November 12, 2021
  * 
  * This work is a part of Firebase ESP Client library
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
@@ -54,7 +54,7 @@ void ESP_Signer::begin(SignerConfig *cfg)
         delete ut;
     config = cfg;
     ut = new SignerUtils(config);
-    std::string().swap(config->signer.tokens.error.message);
+    config->signer.tokens.error.message.clear();
 
     config->_int.esp_signer_reconnect_wifi = WiFi.getAutoReconnect();
 
@@ -64,7 +64,7 @@ void ESP_Signer::begin(SignerConfig *cfg)
             config->signer.tokens.status = esp_signer_token_status_uninitialized;
     }
 
-    if (tokenSigninDataReady())
+    if (tokenSAReady())
         config->signer.tokens.token_type = esp_signer_token_type_oauth2_access_token;
 
     if (strlen_P(config->cert.data))
@@ -78,7 +78,17 @@ void ESP_Signer::begin(SignerConfig *cfg)
             ut->flashTest();
     }
 
+    _token_processing_task_end_request = false;
+
     handleToken();
+}
+
+void ESP_Signer::end()
+{
+    if (!config || _token_processing_task_end_request)
+        return;
+    config->signer.tokens.expires = 0;
+    _token_processing_task_end_request = true;
 }
 
 bool ESP_Signer::parseSAFile()
@@ -108,78 +118,63 @@ bool ESP_Signer::parseSAFile()
         {
             clearSA();
             config->signer.json = new FirebaseJson();
-            config->signer.data = new FirebaseJsonData();
+            config->signer.result = new FirebaseJsonData();
             char *tmp = nullptr;
 
             size_t len = config->_int.esp_signer_file.size();
-            char *buf = ut->newS(len + 10);
+            char *buf = (char *)ut->newP(len + 10);
             if (config->_int.esp_signer_file.available())
             {
                 config->_int.esp_signer_file.readBytes(buf, len);
                 config->signer.json->setJsonData(buf);
             }
             config->_int.esp_signer_file.close();
-            ut->delS(buf);
+            ut->delP(&buf);
 
-            tmp = ut->strP(esp_signer_pgm_str_13);
-            config->signer.json->get(*config->signer.data, (const char *)tmp);
-            ut->delS(tmp);
-            if (config->signer.data->success)
+            if (parseJsonResponse(esp_signer_pgm_str_13))
             {
-                if (ut->strposP(config->signer.data->stringValue.c_str(), esp_signer_pgm_str_14, 0) > -1)
+                if (ut->strposP(config->signer.result->to<const char *>(), esp_signer_pgm_str_14, 0) > -1)
                 {
-                    tmp = ut->strP(esp_signer_pgm_str_15);
-                    config->signer.json->get(*config->signer.data, (const char *)tmp);
-                    ut->delS(tmp);
-                    if (config->signer.data->success)
-                        config->service_account.data.project_id = config->signer.data->stringValue.c_str();
-                    tmp = ut->strP(esp_signer_pgm_str_16);
-                    config->signer.json->get(*config->signer.data, (const char *)tmp);
-                    ut->delS(tmp);
-                    if (config->signer.data->success)
-                        config->service_account.data.private_key_id = config->signer.data->stringValue.c_str();
-                    tmp = ut->strP(esp_signer_pgm_str_17);
-                    config->signer.json->get(*config->signer.data, (const char *)tmp);
-                    ut->delS(tmp);
-                    if (config->signer.data->success)
+                    if (parseJsonResponse(esp_signer_pgm_str_15))
+                        config->service_account.data.project_id = config->signer.result->to<const char *>();
+
+                    if (parseJsonResponse(esp_signer_pgm_str_16))
+                        config->service_account.data.private_key_id = config->signer.result->to<const char *>();
+
+                    if (parseJsonResponse(esp_signer_pgm_str_17))
                     {
-                        tmp = ut->newS(config->signer.data->stringValue.length());
+                        tmp = (char *)ut->newP(strlen(config->signer.result->to<const char *>()));
                         size_t c = 0;
-                        for (size_t i = 0; i < config->signer.data->stringValue.length(); i++)
+                        for (size_t i = 0; i < strlen(config->signer.result->to<const char *>()); i++)
                         {
-                            if (config->signer.data->stringValue[i] == '\\')
+                            if (config->signer.result->to<const char *>()[i] == '\\')
                             {
-                                delay(0);
+                                ut->idle();
                                 tmp[c++] = '\n';
                                 i++;
                             }
                             else
-                                tmp[c++] = config->signer.data->stringValue[i];
+                                tmp[c++] = config->signer.result->to<const char *>()[i];
                         }
                         config->signer.pk = tmp;
-                        config->signer.data->stringValue.clear();
-                        ut->delS(tmp);
+                        config->signer.result->clear();
+                        ut->delP(&tmp);
                     }
 
-                    tmp = ut->strP(esp_signer_pgm_str_18);
-                    config->signer.json->get(*config->signer.data, (const char *)tmp);
-                    ut->delS(tmp);
-                    if (config->signer.data->success)
-                        config->service_account.data.client_email = config->signer.data->stringValue.c_str();
-                    tmp = ut->strP(esp_signer_pgm_str_19);
-                    config->signer.json->get(*config->signer.data, (const char *)tmp);
-                    ut->delS(tmp);
-                    if (config->signer.data->success)
-                        config->service_account.data.client_id = config->signer.data->stringValue.c_str();
+                    if (parseJsonResponse(esp_signer_pgm_str_18))
+                        config->service_account.data.client_email = config->signer.result->to<const char *>();
+
+                    if (parseJsonResponse(esp_signer_pgm_str_19))
+                        config->service_account.data.client_id = config->signer.result->to<const char *>();
 
                     delete config->signer.json;
-                    delete config->signer.data;
+                    delete config->signer.result;
                     return true;
                 }
             }
 
             delete config->signer.json;
-            delete config->signer.data;
+            delete config->signer.result;
         }
     }
 
@@ -192,10 +187,10 @@ void ESP_Signer::clearSA()
     config->service_account.data.project_id.clear();
     config->service_account.data.private_key_id.clear();
     config->service_account.data.client_email.clear();
-    std::string().swap(config->signer.pk);
+    config->signer.pk.clear();
 }
 
-bool ESP_Signer::tokenSigninDataReady()
+bool ESP_Signer::tokenSAReady()
 {
     if (!config)
         return false;
@@ -207,11 +202,31 @@ bool ESP_Signer::handleToken()
     if (!config)
         return false;
 
-    //if the time was set (changed) after token has been generated, update its expiration
-    if (config->signer.tokens.expires > 0 && config->signer.tokens.expires < ESP_DEFAULT_TS && time(nullptr) > ESP_DEFAULT_TS)
-        config->signer.tokens.expires += time(nullptr) - (millis() - config->signer.tokens.last_millis) / 1000 - 60;
+#if defined(ESP8266)
+    if ((config->cert.data != NULL || config->cert.file.length() > 0) && !config->_int.esp_signer_clock_rdy)
+    {
+        ut->idle();
+        time_t now = time(nullptr);
+        config->_int.esp_signer_clock_rdy = now > ut->default_ts;
 
-    if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && (time(nullptr) > config->signer.tokens.expires - config->signer.preRefreshSeconds || config->signer.tokens.expires == 0))
+        if (!config->_int.esp_signer_clock_rdy)
+        {
+            ut->setClock(config->time_zone);
+
+            if (config->signer.tokens.status == esp_signer_token_status_uninitialized)
+            {
+                config->signer.tokens.status = esp_signer_token_status_on_initialize;
+                config->signer.tokens.error.code = 0;
+                config->signer.tokens.error.message.clear();
+                config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
+                sendTokenStatusCB();
+            }
+            return false;
+        }
+    }
+#endif
+
+    if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && isExpired())
     {
 
         if (config->signer.step == esp_signer_jwt_generation_step_begin)
@@ -228,6 +243,7 @@ bool ESP_Signer::handleToken()
                 config->signer.tokens.status = esp_signer_token_status_on_initialize;
                 config->signer.tokens.error.code = 0;
                 config->signer.tokens.error.message.clear();
+                config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
                 sendTokenStatusCB();
 
                 _token_processing_task_enable = true;
@@ -242,83 +258,97 @@ bool ESP_Signer::handleToken()
     return config->signer.tokens.status == esp_signer_token_status_ready;
 }
 
+bool ESP_Signer::isExpired()
+{
+    if (!config)
+        return false;
+
+    //if the time was set (changed) after token has been generated, update its expiration
+    if (config->signer.tokens.expires > 0 && config->signer.tokens.expires < ESP_DEFAULT_TS && time(nullptr) > ESP_DEFAULT_TS)
+        config->signer.tokens.expires += time(nullptr) - (millis() - config->signer.tokens.last_millis) / 1000 - 60;
+
+    if (config->signer.preRefreshSeconds > config->signer.tokens.expires && config->signer.tokens.expires > 0)
+        config->signer.preRefreshSeconds = 60;
+
+    return ((unsigned long)time(nullptr) > config->signer.tokens.expires - config->signer.preRefreshSeconds || config->signer.tokens.expires == 0);
+}
+
 void ESP_Signer::tokenProcessingTask()
 {
+
 #if defined(ESP32)
 
     if (config->signer.tokenTaskRunning)
         return;
 
-    static ESP_Signer *_this = this;
+    bool ret = false;
 
-    TaskFunction_t taskCode = [](void *param) {
-        _this->config->signer.tokenTaskRunning = true;
+    config->signer.tokenTaskRunning = true;
 
-        while (_this->_token_processing_task_enable)
+    while (!ret && config->signer.tokens.status != esp_signer_token_status_ready)
+    {
+        delay(0);
+
+        if (config->signer.step == esp_signer_jwt_generation_step_begin && (millis() - config->_int.esp_signer_last_jwt_begin_step_millis > config->timeout.tokenGenerationBeginStep || config->_int.esp_signer_last_jwt_begin_step_millis == 0))
         {
-            vTaskDelay(20 / portTICK_PERIOD_MS);
+            config->_int.esp_signer_last_jwt_begin_step_millis = millis();
+            ut->setClock(config->time_zone);
+            time_t now = time(nullptr);
+            config->_int.esp_signer_clock_rdy = now > ut->default_ts;
 
-            if (_this->config->signer.step == esp_signer_jwt_generation_step_begin)
-            {
-                _this->ut->setClock(_this->config->time_zone);
-                time_t now = time(nullptr);
-                _this->config->_int.esp_signer_clock_rdy = now > _this->ut->default_ts;
+            if (config->_int.esp_signer_clock_rdy)
+                config->signer.step = esp_signer_jwt_generation_step_encode_header_payload;
+        }
+        else if (config->signer.step == esp_signer_jwt_generation_step_encode_header_payload)
+        {
+            if (createJWT())
+                config->signer.step = esp_signer_jwt_generation_step_sign;
+        }
+        else if (config->signer.step == esp_signer_jwt_generation_step_sign)
+        {
+            if (createJWT())
+                config->signer.step = esp_signer_jwt_generation_step_exchange;
+        }
+        else if (config->signer.step == esp_signer_jwt_generation_step_exchange)
+        {
 
-                if (_this->config->_int.esp_signer_clock_rdy)
-                    _this->config->signer.step = esp_signer_jwt_generation_step_encode_header_payload;
-            }
-            else if (_this->config->signer.step == esp_signer_jwt_generation_step_encode_header_payload)
+            if (requestTokens())
             {
-                if (_this->createJWT())
-                    _this->config->signer.step = esp_signer_jwt_generation_step_sign;
+                config->signer.attempts = 0;
+                _token_processing_task_enable = false;
+                config->signer.step = esp_signer_jwt_generation_step_begin;
+                ret = true;
             }
-            else if (_this->config->signer.step == esp_signer_jwt_generation_step_sign)
+            else
             {
-                if (_this->createJWT())
-                    _this->config->signer.step = esp_signer_jwt_generation_step_exchange;
-            }
-            else if (_this->config->signer.step == esp_signer_jwt_generation_step_exchange)
-            {
-                if (_this->requestTokens())
-                {
-                    _this->config->signer.attempts = 0;
-                    _this->_token_processing_task_enable = false;
-                    _this->config->signer.step = esp_signer_jwt_generation_step_begin;
-                    break;
-                }
+                config->signer.step = esp_signer_jwt_generation_step_begin;
+
+                if (config->signer.attempts < config->max_token_generation_retry)
+                    config->signer.attempts++;
                 else
                 {
-                    if (_this->config->signer.attempts < _this->config->max_token_generation_retry)
-                        _this->config->signer.attempts++;
-                    else
-                    {
-                        _this->config->signer.tokens.error.message.clear();
-                        _this->setTokenError(ESP_SIGNER_ERROR_TOKEN_EXCHANGE_MAX_RETRY_REACHED);
-                        _this->sendTokenStatusCB();
-                        _this->config->signer.attempts = 0;
-                        _this->config->signer.step = esp_signer_jwt_generation_step_begin;
-                        break;
-                    }
+                    config->signer.tokens.error.message.clear();
+                    setTokenError(ESP_SIGNER_ERROR_TOKEN_EXCHANGE_MAX_RETRY_REACHED);
+                    config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
+                    sendTokenStatusCB();
+                    config->signer.attempts = 0;
+                    config->signer.step = esp_signer_jwt_generation_step_begin;
+                    ret = true;
                 }
             }
-
-            yield();
         }
-        _this->config->_int.token_processing_task_handle = NULL;
-        _this->config->signer.tokenTaskRunning = false;
-        vTaskDelete(NULL);
-    };
+    }
 
-    char *taskname = ut->strP(esp_signer_pgm_str_20);
-    xTaskCreatePinnedToCore(taskCode, taskname, 12000, NULL, 3, &config->_int.token_processing_task_handle, 1);
-    ut->delS(taskname);
+    config->signer.tokenTaskRunning = false;
 
 #elif defined(ESP8266)
 
-    if (_token_processing_task_enable)
+    if (_token_processing_task_enable && config->signer.tokens.status != esp_signer_token_status_ready)
     {
-        if (config->signer.step == esp_signer_jwt_generation_step_begin)
+
+        if (config->signer.step == esp_signer_jwt_generation_step_begin && (millis() - config->_int.esp_signer_last_jwt_begin_step_millis > 200 || config->_int.esp_signer_last_jwt_begin_step_millis == 0))
         {
+            config->_int.esp_signer_last_jwt_begin_step_millis = millis();
             config->signer.tokenTaskRunning = true;
             ut->setClock(config->time_zone);
             time_t now = time(nullptr);
@@ -339,6 +369,7 @@ void ESP_Signer::tokenProcessingTask()
         }
         else if (config->signer.step == esp_signer_jwt_generation_step_exchange)
         {
+
             if (requestTokens())
             {
                 config->signer.tokenTaskRunning = false;
@@ -355,6 +386,7 @@ void ESP_Signer::tokenProcessingTask()
                 {
                     config->signer.tokens.error.message.clear();
                     setTokenError(ESP_SIGNER_ERROR_TOKEN_EXCHANGE_MAX_RETRY_REACHED);
+                    config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
                     sendTokenStatusCB();
                     config->signer.tokenTaskRunning = false;
                     _token_processing_task_enable = false;
@@ -409,10 +441,10 @@ void ESP_Signer::setTokenError(int code)
         case ESP_SIGNER_ERROR_TOKEN_EXCHANGE_MAX_RETRY_REACHED:
             ut->appendP(config->signer.tokens.error.message, esp_signer_pgm_str_27, true);
             break;
-        case ESP_SIGNER_ERROR_HTTPC_ERROR_NOT_CONNECTED:
+        case ESP_SIGNER_ERROR_TCP_ERROR_NOT_CONNECTED:
             ut->appendP(config->signer.tokens.error.message, esp_signer_pgm_str_28);
             break;
-        case ESP_SIGNER_ERROR_HTTPC_ERROR_CONNECTION_LOST:
+        case ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_LOST:
             ut->appendP(config->signer.tokens.error.message, esp_signer_pgm_str_29);
             break;
         case ESP_SIGNER_ERROR_HTTP_CODE_REQUEST_TIMEOUT:
@@ -451,7 +483,23 @@ bool ESP_Signer::sdBegin(int8_t ss, int8_t sck, int8_t miso, int8_t mosi)
     return false;
 }
 
-bool ESP_Signer::handleSignerError(int code)
+bool ESP_Signer::sdMMCBegin(const char *mountpoint, bool mode1bit, bool format_if_mount_failed)
+{
+#if defined(ESP32)
+#if defined(CARD_TYPE_SD_MMC)
+    if (config)
+    {
+        config->_int.sd_config.sd_mmc_mountpoint = mountpoint;
+        config->_int.sd_config.sd_mmc_mode1bit = mode1bit;
+        config->_int.sd_config.sd_mmc_format_if_mount_failed = format_if_mount_failed;
+    }
+    return SD_FS.begin(mountpoint, mode1bit, format_if_mount_failed);
+#endif
+#endif
+    return false;
+}
+
+bool ESP_Signer::handleSignerError(int code, int httpCode)
 {
 
     switch (code)
@@ -459,7 +507,8 @@ bool ESP_Signer::handleSignerError(int code)
 
     case 1:
         config->signer.tokens.error.message.clear();
-        setTokenError(ESP_SIGNER_ERROR_HTTPC_ERROR_NOT_CONNECTED);
+        setTokenError(ESP_SIGNER_ERROR_TCP_ERROR_NOT_CONNECTED);
+        config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
         sendTokenStatusCB();
         break;
     case 2:
@@ -470,7 +519,8 @@ bool ESP_Signer::handleSignerError(int code)
         config->signer.wcs->stop();
 #endif
         config->signer.tokens.error.message.clear();
-        setTokenError(ESP_SIGNER_ERROR_HTTPC_ERROR_CONNECTION_LOST);
+        setTokenError(ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_LOST);
+        config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
         sendTokenStatusCB();
         break;
     case 3:
@@ -480,9 +530,20 @@ bool ESP_Signer::handleSignerError(int code)
 #elif defined(ESP8266)
         config->signer.wcs->stop();
 #endif
-        config->signer.tokens.error.message.clear();
-        setTokenError(ESP_SIGNER_ERROR_HTTP_CODE_REQUEST_TIMEOUT);
+
+        if (httpCode == 0)
+        {
+            setTokenError(ESP_SIGNER_ERROR_HTTP_CODE_REQUEST_TIMEOUT);
+            config->signer.tokens.error.message.clear();
+        }
+        else
+        {
+            errorToString(httpCode, config->signer.tokens.error.message);
+            setTokenError(httpCode);
+        }
+        config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
         sendTokenStatusCB();
+
         break;
 
     default:
@@ -493,8 +554,8 @@ bool ESP_Signer::handleSignerError(int code)
         delete config->signer.wcs;
     if (config->signer.json)
         delete config->signer.json;
-    if (config->signer.data)
-        delete config->signer.data;
+    if (config->signer.result)
+        delete config->signer.result;
 
     config->_int.esp_signer_processing = false;
 
@@ -504,13 +565,15 @@ bool ESP_Signer::handleSignerError(int code)
         config->signer.tokens.error.code = code;
         return false;
     }
-    else if (code == 0)
+    else if (code <= 0)
     {
         config->signer.tokens.error.message.clear();
         config->signer.tokens.status = esp_signer_token_status_ready;
         config->signer.attempts = 0;
         config->signer.step = esp_signer_jwt_generation_step_begin;
-        sendTokenStatusCB();
+        config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
+        if (code == 0)
+            sendTokenStatusCB();
         return true;
     }
 
@@ -524,15 +587,30 @@ void ESP_Signer::sendTokenStatusCB()
     tokenInfo.error = config->signer.tokens.error;
 
     if (config->token_status_callback)
-        config->token_status_callback(tokenInfo);
+    {
+        if (millis() - config->_int.esp_signer_last_jwt_generation_error_cb_millis > config->timeout.tokenGenerationError || config->_int.esp_signer_last_jwt_generation_error_cb_millis == 0)
+        {
+            config->_int.esp_signer_last_jwt_generation_error_cb_millis = millis();
+            config->token_status_callback(tokenInfo);
+        }
+    }
 }
 
-bool ESP_Signer::handleTokenResponse()
+bool ESP_Signer::parseJsonResponse(PGM_P key_path)
+{
+    char *tmp = ut->strP(key_path);
+    config->signer.result->clear();
+    config->signer.json->get(*config->signer.result, tmp);
+    ut->delP(&tmp);
+    return config->signer.result->success;
+}
+
+bool ESP_Signer::handleTokenResponse(int &httpCode)
 {
     if (config->_int.esp_signer_reconnect_wifi)
         ut->reconnect(0);
 
-    if (WiFi.status() != WL_CONNECTED)
+    if (WiFi.status() != WL_CONNECTED && !ut->ethLinkUp(&config->spi_ethernet_module))
         return false;
 
     struct esp_signer_server_response_data_t response;
@@ -540,21 +618,11 @@ bool ESP_Signer::handleTokenResponse()
     unsigned long dataTime = millis();
 
     int chunkIdx = 0;
-    int pChunkIdx = 0;
-    int payloadLen = 3200;
-    int pBufPos = 0;
-    int hBufPos = 0;
     int chunkBufSize = 0;
-    int hstate = 0;
-    int pstate = 0;
     int chunkedDataState = 0;
     int chunkedDataSize = 0;
     int chunkedDataLen = 0;
-    int defaultChunkSize = ESP_SIGNER_DEFAULT_RESPONSE_BUFFER_SIZE;
-    char *header = nullptr;
-    char *payload = nullptr;
-    char *pChunk = nullptr;
-    char *tmp = nullptr;
+    MBSTRING header, payload;
     bool isHeader = false;
 #if defined(ESP32)
     WiFiClient *stream = config->signer.wcs->stream();
@@ -571,11 +639,10 @@ bool ESP_Signer::handleTokenResponse()
             return false;
         }
 
-        delay(0);
+        ut->idle();
     }
 
     bool complete = false;
-    int readLen = 0;
     unsigned long datatime = millis();
     while (!complete)
     {
@@ -586,12 +653,12 @@ bool ESP_Signer::handleTokenResponse()
         {
             while (!complete)
             {
+                ut->idle();
+
                 if (config->_int.esp_signer_reconnect_wifi)
                     ut->reconnect(0);
 
-                delay(0);
-                
-                if (WiFi.status() != WL_CONNECTED)
+                if (WiFi.status() != WL_CONNECTED && !ut->ethLinkUp(&config->spi_ethernet_module))
                 {
                     if (stream)
                         if (stream->connected())
@@ -602,32 +669,23 @@ bool ESP_Signer::handleTokenResponse()
 
                 if (chunkBufSize > 0)
                 {
-                    chunkBufSize = defaultChunkSize;
-
                     if (chunkIdx == 0)
                     {
-                        header = ut->newS(chunkBufSize);
-                        hstate = 1;
-                        int readLen = ut->readLine(stream, header, chunkBufSize);
-
+                        ut->readLine(stream, header);
                         int pos = 0;
-
-                        tmp = ut->getHeader(header, esp_signer_pgm_str_31, esp_signer_pgm_str_32, pos, 0);
-                        delay(0);
+                        char *tmp = ut->getHeader(header.c_str(), esp_signer_pgm_str_31, esp_signer_pgm_str_32, pos, 0);
                         if (tmp)
                         {
                             isHeader = true;
-                            hBufPos = readLen;
                             response.httpCode = atoi(tmp);
-                            ut->delS(tmp);
+                            ut->delP(&tmp);
                         }
                     }
                     else
                     {
-                        delay(0);
                         if (isHeader)
                         {
-                            tmp = ut->newS(chunkBufSize);
+                            char *tmp = (char *)ut->newP(chunkBufSize);
                             int readLen = ut->readLine(stream, tmp, chunkBufSize);
                             bool headerEnded = false;
 
@@ -642,49 +700,35 @@ bool ESP_Signer::handleTokenResponse()
                             if (headerEnded)
                             {
                                 isHeader = false;
-                                ut->parseRespHeader(header, response);
-                                if (hstate == 1)
-                                    ut->delS(header);
-                                hstate = 0;
+                                ut->parseRespHeader(header.c_str(), response);
+                                header.clear();
                             }
                             else
-                            {
-                                memcpy(header + hBufPos, tmp, readLen);
-                                hBufPos += readLen;
-                            }
+                                header += tmp;
 
-                            ut->delS(tmp);
+                            ut->delP(&tmp);
                         }
                         else
                         {
                             if (!response.noContent)
                             {
-                                pChunkIdx++;
-
-                                pChunk = ut->newS(chunkBufSize + 1);
-
-                                if (!payload || pstate == 0)
-                                {
-                                    pstate = 1;
-                                    payload = ut->newS(payloadLen + 1);
-                                }
-                                readLen = 0;
                                 if (response.isChunkedEnc)
-                                    readLen = ut->readChunkedData(stream, pChunk, chunkedDataState, chunkedDataSize, chunkedDataLen, chunkBufSize);
+                                    complete = ut->readChunkedData(stream, payload, chunkedDataState, chunkedDataSize, chunkedDataLen) < 0;
                                 else
                                 {
+                                    chunkBufSize = 1024;
                                     if (stream->available() < chunkBufSize)
                                         chunkBufSize = stream->available();
-                                    readLen = stream->readBytes(pChunk, chunkBufSize);
+
+                                    char *tmp = (char *)ut->newP(chunkBufSize + 1);
+                                    int readLen = stream->readBytes(tmp, chunkBufSize);
+
+                                    if (readLen > 0)
+                                        payload += tmp;
+
+                                    ut->delP(&tmp);
+                                    complete = stream->available() <= 0;
                                 }
-
-                                if (readLen > 0)
-                                    memcpy(payload + pBufPos, pChunk, readLen);
-
-                                ut->delS(pChunk);
-                                pBufPos += readLen;
-                                if ((response.isChunkedEnc && readLen < 0) || (!response.isChunkedEnc && stream->available() <= 0))
-                                    complete = true;
                             }
                             else
                             {
@@ -704,16 +748,16 @@ bool ESP_Signer::handleTokenResponse()
         }
     }
 
-    if (hstate == 1)
-        ut->delS(header);
-
     if (stream->connected())
         stream->stop();
 
-    if (payload && !response.noContent)
+    httpCode = response.httpCode;
+
+    if (payload.length() > 0 && !response.noContent)
     {
-        config->signer.json->setJsonData(payload);
-        ut->delS(payload);
+
+        config->signer.json->setJsonData(payload.c_str());
+        payload.clear();
         return true;
     }
 
@@ -728,10 +772,11 @@ bool ESP_Signer::createJWT()
         config->signer.tokens.status = esp_signer_token_status_on_signing;
         config->signer.tokens.error.code = 0;
         config->signer.tokens.error.message.clear();
+        config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
         sendTokenStatusCB();
 
         config->signer.json = new FirebaseJson();
-        config->signer.data = new FirebaseJsonData();
+        config->signer.result = new FirebaseJsonData();
 
         unsigned long now = time(nullptr);
 
@@ -741,33 +786,34 @@ bool ESP_Signer::createJWT()
         char *tmp = ut->strP(esp_signer_pgm_str_33);
         char *tmp2 = ut->strP(esp_signer_pgm_str_34);
         config->signer.json->add(tmp, (const char *)tmp2);
-        ut->delS(tmp);
-        ut->delS(tmp2);
+        ut->delP(&tmp);
+        ut->delP(&tmp2);
         tmp2 = ut->strP(esp_signer_pgm_str_35);
         tmp = ut->strP(esp_signer_pgm_str_36);
         config->signer.json->add(tmp, (const char *)tmp2);
-        ut->delS(tmp);
-        ut->delS(tmp2);
+        ut->delP(&tmp);
+        ut->delP(&tmp2);
 
-        config->signer.header = config->signer.json->raw();
-        size_t len = ut->base64EncLen(config->signer.header.length());
-        char *buf = ut->newS(len);
-        ut->encodeBase64Url(buf, (unsigned char *)config->signer.header.c_str(), config->signer.header.length());
+        MBSTRING hdr;
+        config->signer.json->toString(hdr);
+        size_t len = ut->base64EncLen(hdr.length());
+        char *buf = (char *)ut->newP(len);
+        ut->encodeBase64Url(buf, (unsigned char *)hdr.c_str(), hdr.length());
         config->signer.encHeader = buf;
-        ut->delS(buf);
-        config->signer.header.clear();
+        ut->delP(&buf);
         config->signer.encHeadPayload = config->signer.encHeader;
+        hdr.clear();
 
         //payload
         config->signer.json->clear();
         tmp = ut->strP(esp_signer_pgm_str_37);
         config->signer.json->add(tmp, config->service_account.data.client_email.c_str());
-        ut->delS(tmp);
+        ut->delP(&tmp);
         tmp = ut->strP(esp_signer_pgm_str_38);
         config->signer.json->add(tmp, config->service_account.data.client_email.c_str());
-        ut->delS(tmp);
+        ut->delP(&tmp);
         tmp = ut->strP(esp_signer_pgm_str_39);
-        std::string t;
+        MBSTRING t;
         ut->appendP(t, esp_signer_pgm_str_40);
         if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token)
         {
@@ -779,11 +825,11 @@ bool ESP_Signer::createJWT()
         }
 
         config->signer.json->add(tmp, t.c_str());
-        ut->delS(tmp);
+        ut->delP(&tmp);
 
         tmp = ut->strP(esp_signer_pgm_str_46);
         config->signer.json->add(tmp, (int)now);
-        ut->delS(tmp);
+        ut->delP(&tmp);
 
         tmp = ut->strP(esp_signer_pgm_str_47);
 
@@ -792,16 +838,16 @@ bool ESP_Signer::createJWT()
         else
             config->signer.json->add(tmp, (int)(now + config->signer.expiredSeconds));
 
-        ut->delS(tmp);
+        ut->delP(&tmp);
 
         if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token)
         {
 
-            std::string s;
+            MBSTRING s;
 
             if (config->signer.tokens.scope.length() > 0)
             {
-                std::vector<std::string> scopes = std::vector<std::string>();
+                std::vector<MBSTRING> scopes = std::vector<MBSTRING>();
                 ut->splitTk(config->signer.tokens.scope, scopes, ",");
                 for (size_t i = 0; i < scopes.size(); i++)
                 {
@@ -809,47 +855,49 @@ bool ESP_Signer::createJWT()
                         ut->appendP(s, esp_signer_pgm_str_32);
                     s += scopes[i];
                     scopes[i].clear();
-                    std::string().swap(scopes[i]);
                 }
                 scopes.clear();
             }
 
             tmp = ut->strP(esp_signer_pgm_str_56);
             config->signer.json->add(tmp, s.c_str());
-            ut->delS(tmp);
+            ut->delP(&tmp);
         }
 
-        config->signer.payload = config->signer.json->raw();
-        len = ut->base64EncLen(config->signer.payload.length());
-        buf = ut->newS(len);
-        ut->encodeBase64Url(buf, (unsigned char *)config->signer.payload.c_str(), config->signer.payload.length());
+        MBSTRING payload;
+        config->signer.json->toString(payload);
+
+        len = ut->base64EncLen(payload.length());
+        buf = (char *)ut->newP(len);
+        ut->encodeBase64Url(buf, (unsigned char *)payload.c_str(), payload.length());
         config->signer.encPayload = buf;
-        ut->delS(buf);
-        config->signer.payload.clear();
+        ut->delP(&buf);
+        payload.clear();
 
         ut->appendP(config->signer.encHeadPayload, esp_signer_pgm_str_42);
         config->signer.encHeadPayload += config->signer.encPayload;
 
-        std::string().swap(config->signer.encHeader);
-        std::string().swap(config->signer.encPayload);
+        config->signer.encHeader.clear();
+        config->signer.encPayload.clear();
 
 //create message digest from encoded header and payload
 #if defined(ESP32)
-        config->signer.hash = new uint8_t[config->signer.hashSize];
+        config->signer.hash = (uint8_t *)ut->newP(config->signer.hashSize);
         int ret = mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), (const unsigned char *)config->signer.encHeadPayload.c_str(), config->signer.encHeadPayload.length(), config->signer.hash);
         if (ret != 0)
         {
-            char *tmp = ut->newS(100);
+            char *tmp = (char *)ut->newP(100);
             mbedtls_strerror(ret, tmp, 100);
             config->signer.tokens.error.message = tmp;
-            ut->delS(tmp);
+            config->signer.tokens.error.message.insert(0, (const char *)FPSTR("mbedTLS, mbedtls_md: "));
+            ut->delP(&tmp);
             setTokenError(ESP_SIGNER_ERROR_TOKEN_CREATE_HASH);
             sendTokenStatusCB();
-            delete[] config->signer.hash;
+            ut->delP(&config->signer.hash);
             return false;
         }
 #elif defined(ESP8266)
-        config->signer.hash = ut->newS(config->signer.hashSize);
+        config->signer.hash = (char *)ut->newP(config->signer.hashSize);
         br_sha256_context mc;
         br_sha256_init(&mc);
         br_sha256_update(&mc, config->signer.encHeadPayload.c_str(), config->signer.encHeadPayload.length());
@@ -858,10 +906,10 @@ bool ESP_Signer::createJWT()
 
         config->signer.tokens.jwt = config->signer.encHeadPayload;
         ut->appendP(config->signer.tokens.jwt, esp_signer_pgm_str_42);
-        std::string().swap(config->signer.encHeadPayload);
+        config->signer.encHeadPayload.clear();
 
         delete config->signer.json;
-        delete config->signer.data;
+        delete config->signer.result;
     }
     else if (config->signer.step == esp_signer_jwt_generation_step_sign)
     {
@@ -880,34 +928,36 @@ bool ESP_Signer::createJWT()
 
         if (ret != 0)
         {
-            char *tmp = ut->newS(100);
+            char *tmp = (char *)ut->newP(100);
             mbedtls_strerror(ret, tmp, 100);
             config->signer.tokens.error.message = tmp;
-            ut->delS(tmp);
+            config->signer.tokens.error.message.insert(0, (const char *)FPSTR("mbedTLS, mbedtls_pk_parse_key: "));
+            ut->delP(&tmp);
             setTokenError(ESP_SIGNER_ERROR_TOKEN_PARSE_PK);
             sendTokenStatusCB();
             mbedtls_pk_free(config->signer.pk_ctx);
-            delete[] config->signer.hash;
+            ut->delP(&config->signer.hash);
             delete config->signer.pk_ctx;
             return false;
         }
 
         //generate RSA signature from private key and message digest
-        config->signer.signature = new unsigned char[config->signer.signatureSize];
-        size_t retSize = 0;
+        config->signer.signature = (unsigned char *)ut->newP(config->signer.signatureSize);
+        size_t sigLen = 0;
         config->signer.entropy_ctx = new mbedtls_entropy_context();
         config->signer.ctr_drbg_ctx = new mbedtls_ctr_drbg_context();
         mbedtls_entropy_init(config->signer.entropy_ctx);
         mbedtls_ctr_drbg_init(config->signer.ctr_drbg_ctx);
         mbedtls_ctr_drbg_seed(config->signer.ctr_drbg_ctx, mbedtls_entropy_func, config->signer.entropy_ctx, NULL, 0);
 
-        ret = mbedtls_pk_sign(config->signer.pk_ctx, MBEDTLS_MD_SHA256, (const unsigned char *)config->signer.hash, sizeof(config->signer.hash), config->signer.signature, &retSize, mbedtls_ctr_drbg_random, config->signer.ctr_drbg_ctx);
+        ret = mbedtls_pk_sign(config->signer.pk_ctx, MBEDTLS_MD_SHA256, (const unsigned char *)config->signer.hash, config->signer.hashSize, config->signer.signature, &sigLen, mbedtls_ctr_drbg_random, config->signer.ctr_drbg_ctx);
         if (ret != 0)
         {
-            char *tmp = ut->newS(100);
+            char *tmp = (char *)ut->newP(100);
             mbedtls_strerror(ret, tmp, 100);
             config->signer.tokens.error.message = tmp;
-            ut->delS(tmp);
+            config->signer.tokens.error.message.insert(0, (const char *)FPSTR("mbedTLS, mbedtls_pk_sign: "));
+            ut->delP(&tmp);
             setTokenError(ESP_SIGNER_ERROR_TOKEN_SIGN);
             sendTokenStatusCB();
         }
@@ -915,18 +965,18 @@ bool ESP_Signer::createJWT()
         {
             config->signer.encSignature.clear();
             size_t len = ut->base64EncLen(config->signer.signatureSize);
-            char *buf = ut->newS(len);
+            char *buf = (char *)ut->newP(len);
             ut->encodeBase64Url(buf, config->signer.signature, config->signer.signatureSize);
             config->signer.encSignature = buf;
-            ut->delS(buf);
+            ut->delP(&buf);
 
             config->signer.tokens.jwt += config->signer.encSignature;
-            std::string().swap(config->signer.pk);
-            std::string().swap(config->signer.encSignature);
+            config->signer.pk.clear();
+            config->signer.encSignature.clear();
         }
 
-        delete[] config->signer.signature;
-        delete[] config->signer.hash;
+        ut->delP(&config->signer.signature);
+        ut->delP(&config->signer.hash);
         mbedtls_pk_free(config->signer.pk_ctx);
         mbedtls_entropy_free(config->signer.entropy_ctx);
         mbedtls_ctr_drbg_free(config->signer.ctr_drbg_ctx);
@@ -939,7 +989,7 @@ bool ESP_Signer::createJWT()
 #elif defined(ESP8266)
         //RSA private key
         BearSSL::PrivateKey *pk = nullptr;
-        delay(0);
+        ut->idle();
         //parse priv key
         if (config->signer.pk.length() > 0)
             pk = new BearSSL::PrivateKey((const char *)config->signer.pk.c_str());
@@ -949,6 +999,7 @@ bool ESP_Signer::createJWT()
         if (!pk)
         {
             setTokenError(ESP_SIGNER_ERROR_TOKEN_PARSE_PK);
+            config->signer.tokens.error.message.insert(0, (const char *)FPSTR("BearSSL, PrivateKey: "));
             sendTokenStatusCB();
             return false;
         }
@@ -956,6 +1007,7 @@ bool ESP_Signer::createJWT()
         if (!pk->isRSA())
         {
             setTokenError(ESP_SIGNER_ERROR_TOKEN_PARSE_PK);
+            config->signer.tokens.error.message.insert(0, (const char *)FPSTR("BearSSL, isRSA: "));
             sendTokenStatusCB();
             delete pk;
             return false;
@@ -966,28 +1018,29 @@ bool ESP_Signer::createJWT()
         //generate RSA signature from private key and message digest
         config->signer.signature = new unsigned char[config->signer.signatureSize];
 
-        delay(0);
+        ut->idle();
         int ret = br_rsa_i15_pkcs1_sign(BR_HASH_OID_SHA256, (const unsigned char *)config->signer.hash, br_sha256_SIZE, br_rsa_key, config->signer.signature);
-        delay(0);
-        ut->delS(config->signer.hash);
+        ut->idle();
+        ut->delP(&config->signer.hash);
 
         size_t len = ut->base64EncLen(config->signer.signatureSize);
-        char *buf = ut->newS(len);
+        char *buf = (char *)ut->newP(len);
         ut->encodeBase64Url(buf, config->signer.signature, config->signer.signatureSize);
         config->signer.encSignature = buf;
-        ut->delS(buf);
-        delete[] config->signer.signature;
+        ut->delP(&buf);
+        ut->delP(&config->signer.signature);
         delete pk;
         //get the signed JWT
         if (ret > 0)
         {
             config->signer.tokens.jwt += config->signer.encSignature;
-            std::string().swap(config->signer.pk);
-            std::string().swap(config->signer.encSignature);
+            config->signer.pk.clear();
+            config->signer.encSignature.clear();
         }
         else
         {
             setTokenError(ESP_SIGNER_ERROR_TOKEN_SIGN);
+            config->signer.tokens.error.message.insert(0, (const char *)FPSTR("BearSSL, br_rsa_i15_pkcs1_sign: "));
             sendTokenStatusCB();
             return false;
         }
@@ -1003,10 +1056,10 @@ bool ESP_Signer::requestTokens()
     if (config->_int.esp_signer_reconnect_wifi)
         ut->reconnect(0);
 
-    if (WiFi.status() != WL_CONNECTED)
+    if (WiFi.status() != WL_CONNECTED && !ut->ethLinkUp(&config->spi_ethernet_module))
         return false;
 
-    delay(0);
+    ut->idle();
 
     if (config->signer.tokens.status == esp_signer_token_status_on_request || config->signer.tokens.status == esp_signer_token_status_on_refresh || time(nullptr) < ut->default_ts || config->_int.esp_signer_processing)
         return false;
@@ -1015,35 +1068,37 @@ bool ESP_Signer::requestTokens()
     config->_int.esp_signer_processing = true;
     config->signer.tokens.error.code = 0;
     config->signer.tokens.error.message.clear();
+    config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
     sendTokenStatusCB();
 
 #if defined(ESP32)
-    config->signer.wcs = new ESP_Signer_HTTPClient32();
+    config->signer.wcs = new ESP_SIGNER_TCP_Client();
     config->signer.wcs->setCACert(nullptr);
 #elif defined(ESP8266)
     config->signer.wcs = new WiFiClientSecure();
     config->signer.wcs->setInsecure();
-    config->signer.wcs->setBufferSizes(512, 512);
+    config->signer.wcs->setBufferSizes(1024, 1024);
 #endif
     config->signer.json = new FirebaseJson();
-    config->signer.data = new FirebaseJsonData();
+    config->signer.result = new FirebaseJsonData();
 
-    std::string host;
+    MBSTRING host;
     ut->appendP(host, esp_signer_pgm_str_48);
     ut->appendP(host, esp_signer_pgm_str_42);
     ut->appendP(host, esp_signer_pgm_str_43);
 
-    delay(0);
+    ut->idle();
 #if defined(ESP32)
     config->signer.wcs->begin(host.c_str(), 443);
 #elif defined(ESP8266)
+
+    ut->ethDNSWorkAround(&ut->config->spi_ethernet_module, host.c_str(), 443);
     int ret = config->signer.wcs->connect(host.c_str(), 443);
     if (ret == 0)
         return handleSignerError(1);
 #endif
 
-    String s;
-    std::string req;
+    MBSTRING req;
     ut->appendP(req, esp_signer_pgm_str_57);
     ut->appendP(req, esp_signer_pgm_str_32);
 
@@ -1052,11 +1107,11 @@ bool ESP_Signer::requestTokens()
         char *tmp = ut->strP(esp_signer_pgm_str_58);
         char *tmp2 = ut->strP(esp_signer_pgm_str_59);
         config->signer.json->add(tmp, (const char *)tmp2);
-        ut->delS(tmp);
-        ut->delS(tmp2);
+        ut->delP(&tmp);
+        ut->delP(&tmp2);
         tmp = ut->strP(esp_signer_pgm_str_60);
         config->signer.json->add(tmp, config->signer.tokens.jwt.c_str());
-        ut->delS(tmp);
+        ut->delP(&tmp);
 
         ut->appendP(req, esp_signer_pgm_str_44);
         ut->appendP(req, esp_signer_pgm_str_45);
@@ -1071,53 +1126,58 @@ bool ESP_Signer::requestTokens()
     ut->appendP(req, esp_signer_pgm_str_63);
     ut->appendP(req, esp_signer_pgm_str_64);
     ut->appendP(req, esp_signer_pgm_str_65);
-    config->signer.json->toString(s);
-    char *tmp = ut->intStr(s.length());
-    req += tmp;
-    ut->delS(tmp);
+    req += NUM2S(strlen(config->signer.json->raw())).get();
     ut->appendP(req, esp_signer_pgm_str_63);
     ut->appendP(req, esp_signer_pgm_str_66);
     ut->appendP(req, esp_signer_pgm_str_67);
     ut->appendP(req, esp_signer_pgm_str_63);
     ut->appendP(req, esp_signer_pgm_str_63);
 
-    req += s.c_str();
+    req += config->signer.json->raw();
 #if defined(ESP32)
     config->signer.wcs->setInsecure();
-    if (config->signer.wcs->send(req.c_str(), "") < 0)
+    int ret = config->signer.wcs->send(req.c_str());
+    req.clear();
+    if (ret < 0)
         return handleSignerError(2);
 #elif defined(ESP8266)
     size_t sz = req.length();
     size_t len = config->signer.wcs->print(req.c_str());
-    std::string().swap(req);
+    req.clear();
     if (len != sz)
         return handleSignerError(2);
 #endif
 
     struct esp_signer_auth_token_error_t error;
 
-    if (handleTokenResponse())
+    int httpCode = 0;
+    if (handleTokenResponse(httpCode))
     {
-        std::string().swap(config->signer.tokens.jwt);
-        tmp = ut->strP(esp_signer_pgm_str_68);
-        config->signer.json->get(*config->signer.data, tmp);
-        ut->delS(tmp);
-        if (config->signer.data->success)
+        config->signer.tokens.jwt.clear();
+        if (parseJsonResponse(esp_signer_pgm_str_68))
         {
-            error.code = config->signer.data->intValue;
+
+            error.code = config->signer.result->to<int>();
             config->signer.tokens.status = esp_signer_token_status_error;
 
-            tmp = ut->strP(esp_signer_pgm_str_69);
-            config->signer.json->get(*config->signer.data, tmp);
-            ut->delS(tmp);
-            if (config->signer.data->success)
-                error.message = config->signer.data->stringValue.c_str();
+            if (parseJsonResponse(esp_signer_pgm_str_69))
+                error.message = config->signer.result->to<const char *>();
+        }
+        else if (parseJsonResponse(esp_signer_pgm_str_113))
+        {
+
+            error.code = -1;
+            config->signer.tokens.status = esp_signer_token_status_error;
+
+            if (parseJsonResponse(esp_signer_pgm_str_12))
+                error.message = config->signer.result->to<const char *>();
         }
 
         config->signer.tokens.error = error;
         tokenInfo.status = config->signer.tokens.status;
         tokenInfo.type = config->signer.tokens.token_type;
         tokenInfo.error = config->signer.tokens.error;
+        config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
         if (error.code != 0)
             sendTokenStatusCB();
 
@@ -1125,35 +1185,29 @@ bool ESP_Signer::requestTokens()
         {
             if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token)
             {
-                tmp = ut->strP(esp_signer_pgm_str_70);
-                config->signer.json->get(*config->signer.data, tmp);
-                ut->delS(tmp);
-                if (config->signer.data->success)
-                    config->signer.tokens.access_token = config->signer.data->stringValue.c_str();
+                if (parseJsonResponse(esp_signer_pgm_str_70))
+                    config->signer.tokens.access_token = config->signer.result->to<const char *>();
 
-                tmp = ut->strP(esp_signer_pgm_str_71);
-                config->signer.json->get(*config->signer.data, tmp);
-                ut->delS(tmp);
-                if (config->signer.data->success)
-                    config->signer.tokens.auth_type = config->signer.data->stringValue.c_str();
+                if (parseJsonResponse(esp_signer_pgm_str_71))
+                    config->signer.tokens.auth_type = config->signer.result->to<const char *>();
 
-                tmp = ut->strP(esp_signer_pgm_str_72);
-                config->signer.json->get(*config->signer.data, tmp);
-                ut->delS(tmp);
-                if (config->signer.data->success)
-                {
-                    time_t ts = time(nullptr);
-                    unsigned long ms = millis();
-                    config->signer.tokens.expires = ts + atoi(config->signer.data->stringValue.c_str());
-                    config->signer.tokens.last_millis = ms;
-                }
+                if (parseJsonResponse(esp_signer_pgm_str_72))
+                    getExpiration(config->signer.result->to<const char *>());
             }
             return handleSignerError(0);
         }
         return handleSignerError(4);
     }
 
-    return handleSignerError(3);
+    return handleSignerError(3, httpCode);
+}
+
+void ESP_Signer::getExpiration(const char *exp)
+{
+    time_t ts = time(nullptr);
+    unsigned long ms = millis();
+    config->signer.tokens.expires = ts + atoi(exp);
+    config->signer.tokens.last_millis = ms;
 }
 
 void ESP_Signer::checkToken()
@@ -1165,8 +1219,30 @@ void ESP_Signer::checkToken()
     if (config->signer.tokens.expires > 0 && config->signer.tokens.expires < ESP_DEFAULT_TS && time(nullptr) > ESP_DEFAULT_TS)
         config->signer.tokens.expires += time(nullptr) - (millis() - config->signer.tokens.last_millis) / 1000 - 60;
 
-    if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && (time(nullptr) > config->signer.tokens.expires - config->signer.preRefreshSeconds || config->signer.tokens.expires == 0))
+    if (config->signer.preRefreshSeconds > config->signer.tokens.expires && config->signer.tokens.expires > 0)
+        config->signer.preRefreshSeconds = 60;
+
+    if (_token_processing_task_end_request && config->signer.tokens.status == esp_signer_token_status_ready)
+    {
+
+        config->signer.pk.clear();
+        config->signer.tokens.jwt.clear();
+        config->signer.tokens.access_token.clear();
+        config->signer.tokens.token_type = esp_signer_token_type_undefined;
+
+        config->signer.tokens.status = esp_signer_token_status_uninitialized;
+        config->signer.tokens.error.code = 0;
+        config->signer.tokens.error.message.clear();
+        config->_int.esp_signer_last_jwt_generation_error_cb_millis = 0;
+        config->signer.tokens.status = esp_signer_token_status_uninitialized;
+        _token_processing_task_end_request = false;
+        _token_processing_task_enable = false;
+    }
+    
+    if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token && ((unsigned long)time(nullptr) > config->signer.tokens.expires - config->signer.preRefreshSeconds || config->signer.tokens.expires == 0))
         handleToken();
+
+  
 }
 
 bool ESP_Signer::tokenReady()
@@ -1190,7 +1266,7 @@ String ESP_Signer::getTokenType(TokenInfo info)
     if (!config)
         return "";
 
-    std::string s;
+    MBSTRING s;
     switch (info.type)
     {
     case esp_signer_token_type_undefined:
@@ -1215,7 +1291,7 @@ String ESP_Signer::getTokenStatus(TokenInfo info)
     if (!config)
         return "";
 
-    std::string s;
+    MBSTRING s;
     switch (info.status)
     {
     case esp_signer_token_status_uninitialized:
@@ -1256,11 +1332,9 @@ String ESP_Signer::getTokenError(TokenInfo info)
     if (!config)
         return "";
 
-    std::string s;
+    MBSTRING s;
     ut->appendP(s, esp_signer_pgm_str_114);
-    char *tmp = ut->intStr(info.error.code);
-    s += tmp;
-    ut->delS(tmp);
+    s += NUM2S(info.error.code).get();
     ut->appendP(s, esp_signer_pgm_str_115);
     s += info.error.message;
     return s.c_str();
@@ -1282,7 +1356,7 @@ void ESP_Signer::refreshToken()
     checkToken();
 }
 
-void ESP_Signer::errorToString(int httpCode, std::string &buff)
+void ESP_Signer::errorToString(int httpCode, MBSTRING &buff)
 {
     buff.clear();
 
@@ -1297,22 +1371,22 @@ void ESP_Signer::errorToString(int httpCode, std::string &buff)
 
     switch (httpCode)
     {
-    case ESP_SIGNER_ERROR_HTTPC_ERROR_CONNECTION_REFUSED:
+    case ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_REFUSED:
         ut->appendP(buff, esp_signer_pgm_str_73);
         return;
-    case ESP_SIGNER_ERROR_HTTPC_ERROR_SEND_HEADER_FAILED:
+    case ESP_SIGNER_ERROR_TCP_ERROR_SEND_HEADER_FAILED:
         ut->appendP(buff, esp_signer_pgm_str_74);
         return;
-    case ESP_SIGNER_ERROR_HTTPC_ERROR_SEND_PAYLOAD_FAILED:
+    case ESP_SIGNER_ERROR_TCP_ERROR_SEND_PAYLOAD_FAILED:
         ut->appendP(buff, esp_signer_pgm_str_75);
         return;
-    case ESP_SIGNER_ERROR_HTTPC_ERROR_NOT_CONNECTED:
+    case ESP_SIGNER_ERROR_TCP_ERROR_NOT_CONNECTED:
         ut->appendP(buff, esp_signer_pgm_str_28);
         return;
-    case ESP_SIGNER_ERROR_HTTPC_ERROR_CONNECTION_LOST:
+    case ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_LOST:
         ut->appendP(buff, esp_signer_pgm_str_29);
         return;
-    case ESP_SIGNER_ERROR_HTTPC_ERROR_NO_HTTP_SERVER:
+    case ESP_SIGNER_ERROR_TCP_ERROR_NO_HTTP_SERVER:
         ut->appendP(buff, esp_signer_pgm_str_76);
         return;
     case ESP_SIGNER_ERROR_HTTP_CODE_BAD_REQUEST:
@@ -1387,10 +1461,10 @@ void ESP_Signer::errorToString(int httpCode, std::string &buff)
     case ESP_SIGNER_ERROR_HTTP_CODE_PRECONDITION_FAILED:
         ut->appendP(buff, esp_signer_pgm_str_99);
         return;
-    case ESP_SIGNER_ERROR_HTTPC_ERROR_READ_TIMEOUT:
+    case ESP_SIGNER_ERROR_TCP_RESPONSE_PAYLOAD_READ_TIMED_OUT:
         ut->appendP(buff, esp_signer_pgm_str_100);
         return;
-    case ESP_SIGNER_ERROR_HTTPC_ERROR_CONNECTION_INUSED:
+    case ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_INUSED:
         ut->appendP(buff, esp_signer_pgm_str_101);
         return;
     case ESP_SIGNER_ERROR_BUFFER_OVERFLOW:

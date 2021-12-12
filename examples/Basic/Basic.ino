@@ -11,12 +11,15 @@
 #define WIFI_SSID "WiFi SSID"
 #define WIFI_PASSWORD "WIFi PSK"
 
+
+
 /** These credentials are taken from Service Account key file (JSON)
  * https://cloud.google.com/iam/docs/service-accounts
 */
+// See https://github.com/mobizt/ESP-Signer#how-to-create-service-account-private-key
+
 #define PROJECT_ID "The project ID"                                                             //Taken from "project_id" key in JSON file.
 #define CLIENT_EMAIL "Client Email"                                                             //Taken from "client_email" key in JSON file.
-#define PRIVATE_KEY_ID "Private key ID"                                                         //Taken from "private_key_id" in JSON file.
 const char PRIVATE_KEY[] PROGMEM = "-----BEGIN PRIVATE KEY-----\\n-----END PRIVATE KEY-----\n"; //Taken from "private_key" key in JSON file.
 
 SignerConfig config;
@@ -81,10 +84,18 @@ void setup()
 
 void loop()
 {
-    delay(1000);
 
     /* Check for token generation ready state and also refresh the access token if it expired */
     bool ready = Signer.tokenReady();
+    if (ready)
+    {
+        int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - time(nullptr);
+        //Token will be refreshed automatically
+
+        Serial.print("Remaining seconds to refresh the token, ");
+        Serial.println(t);
+        delay(1000);
+    }
 }
 
 void tokenStatusCallback(TokenInfo info)

@@ -52,12 +52,77 @@ public:
 
     ~SignerUtils(){};
 
+    bool ethLinkUp(SPI_ETH_Module *spi_ethernet_module = NULL)
+    {
+        bool ret = false;
+#if defined(ESP32)
+        char *ip = strP(esp_signer_pgm_str_11);
+        if (strcmp(ETH.localIP().toString().c_str(), ip) != 0)
+        {
+            ret = true;
+            ETH.linkUp();
+        }
+        delP(&ip);
+#elif defined(ESP8266) && defined(ESP8266_CORE_SDK_V3_X_X)
+
+        if (!spi_ethernet_module)
+            return ret;
+
+#if defined(INC_ENC28J60_LWIP)
+        if (spi_ethernet_module->enc28j60)
+            return spi_ethernet_module->enc28j60->status() == WL_CONNECTED;
+#endif
+#if defined(INC_W5100_LWIP)
+        if (spi_ethernet_module->w5100)
+            return spi_ethernet_module->w5100->status() == WL_CONNECTED;
+#endif
+#if defined(INC_W5100_LWIP)
+        if (spi_ethernet_module->w5500)
+            return spi_ethernet_module->w5500->status() == WL_CONNECTED;
+#endif
+
+#endif
+        return ret;
+    }
+
+    void ethDNSWorkAround(SPI_ETH_Module *spi_ethernet_module, const char *host, int port)
+    {
+#if defined(ESP8266) && defined(ESP8266_CORE_SDK_V3_X_X)
+
+        if (!spi_ethernet_module)
+            goto ex;
+
+#if defined(INC_ENC28J60_LWIP)
+        if (spi_ethernet_module->enc28j60)
+            goto ex;
+#endif
+#if defined(INC_W5100_LWIP)
+        if (spi_ethernet_module->w5100)
+            goto ex;
+#endif
+#if defined(INC_W5100_LWIP)
+        if (spi_ethernet_module->w5500)
+            goto ex;
+#endif
+        return;
+    ex:
+        WiFiClient client;
+        client.connect(host, port);
+        client.stop();
+
+#endif
+    }
+
+    void idle()
+    {
+        delay(0);
+    }
     char *strP(PGM_P pgm)
     {
         size_t len = strlen_P(pgm) + 5;
-        char *buf = newS(len);
-        memset(buf, 0, len);
+        char *buf = (char *)newP(len);
         strcpy_P(buf, pgm);
+        buf[strlen_P(pgm)] = 0;
         return buf;
     }
 
@@ -65,7 +130,7 @@ public:
     {
         char *tmp = strP(beginH);
         int p = strpos(buf, tmp, ofs);
-        delS(tmp);
+        delP(&tmp);
         return p;
     }
 
@@ -80,12 +145,12 @@ public:
             ofs = p;
         }
         tmp = strP(beginH);
-        char *tmp2 = newS(strlen_P(beginH) + 1);
+        char *tmp2 = (char *)newP(strlen_P(beginH) + 1);
         memcpy(tmp2, &buf[ofs], strlen_P(beginH));
         tmp2[strlen_P(beginH)] = 0;
         bool ret = (strcasecmp(tmp, tmp2) == 0);
-        delS(tmp);
-        delS(tmp2);
+        delP(&tmp);
+        delP(&tmp2);
         return ret;
     }
 
@@ -104,7 +169,7 @@ public:
                 p2 = strlen(buf);
 
             int len = p2 - p1 - strlen_P(beginH);
-            tmp = newS(len + 1);
+            tmp = (char *)newP(len + 1);
             memcpy(tmp, &buf[p1 + strlen_P(beginH)], len);
             return tmp;
         }
@@ -112,65 +177,13 @@ public:
         return nullptr;
     }
 
-    char *floatStr(float value)
-    {
-        char *buf = newS(36);
-        memset(buf, 0, 36);
-        dtostrf(value, 7, 15, buf);
-        return buf;
-    }
-
-    char *intStr(int value)
-    {
-        char *buf = newS(36);
-        memset(buf, 0, 36);
-        itoa(value, buf, 10);
-        return buf;
-    }
-
-    char *boolStr(bool value)
-    {
-        char *buf = nullptr;
-        if (value)
-            buf = strP(esp_signer_pgm_str_1);
-        else
-            buf = strP(esp_signer_pgm_str_2);
-        return buf;
-    }
-
-    char *doubleStr(double value)
-    {
-        char *buf = newS(36);
-        memset(buf, 0, 36);
-        dtostrf(value, 12, 15, buf);
-        return buf;
-    }
-
-    void appendP(std::string &buf, PGM_P p, bool empty = false)
+    void appendP(MBSTRING &buf, PGM_P p, bool empty = false)
     {
         if (empty)
             buf.clear();
         char *b = strP(p);
         buf += b;
-        delS(b);
-    }
-
-    void trimDigits(char *buf)
-    {
-        size_t i = strlen(buf) - 1;
-        while (buf[i] == '0' && i > 0)
-        {
-            if (buf[i - 1] == '.')
-            {
-                i--;
-                break;
-            }
-            if (buf[i - 1] != '0')
-                break;
-            i--;
-        }
-        if (i < strlen(buf) - 1)
-            buf[i] = '\0';
+        delP(&b);
     }
 
     void strcat_c(char *str, char c)
@@ -183,120 +196,239 @@ public:
 
     int strpos(const char *haystack, const char *needle, int offset)
     {
-        size_t len = strlen(haystack);
-        size_t len2 = strlen(needle);
-        if (len == 0 || len < len2 || len2 == 0 || offset >= (int)len)
+        if (!haystack || !needle)
             return -1;
-        char *_haystack = newS(len - offset + 1);
-        _haystack[len - offset] = 0;
-        strncpy(_haystack, haystack + offset, len - offset);
-        char *p = strstr(_haystack, needle);
-        int r = -1;
-        if (p)
-            r = p - _haystack + offset;
-        delS(_haystack);
-        return r;
-    }
 
-    char *rstrstr(const char *haystack, const char *needle)
-    {
-        size_t needle_length = strlen(needle);
-        const char *haystack_end = haystack + strlen(haystack) - needle_length;
-        const char *p;
-        size_t i;
-        for (p = haystack_end; p >= haystack; --p)
+        int hlen = strlen(haystack);
+        int nlen = strlen(needle);
+
+        if (hlen == 0 || nlen == 0)
+            return -1;
+
+        int hidx = offset, nidx = 0;
+        while ((*(haystack + hidx) != '\0') && (*(needle + nidx) != '\0') && hidx < hlen)
         {
-            for (i = 0; i < needle_length; ++i)
+            if (*(needle + nidx) != *(haystack + hidx))
             {
-                if (p[i] != needle[i])
-                    goto next;
+                hidx++;
+                nidx = 0;
             }
-            return (char *)p;
-        next:;
-        }
-        return 0;
-    }
-
-    int rstrpos(const char *haystack, const char *needle, int offset)
-    {
-        size_t len = strlen(haystack);
-        size_t len2 = strlen(needle);
-        if (len == 0 || len < len2 || len2 == 0 || offset >= (int)len)
-            return -1;
-        char *_haystack = newS(len - offset + 1);
-        _haystack[len - offset] = 0;
-        strncpy(_haystack, haystack + offset, len - offset);
-        char *p = rstrstr(_haystack, needle);
-        int r = -1;
-        if (p)
-            r = p - _haystack + offset;
-        delS(_haystack);
-        return r;
-    }
-
-    inline std::string trim(const std::string &s)
-    {
-        auto wsfront = std::find_if_not(s.begin(), s.end(), [](int c) { return std::isspace(c); });
-        return std::string(wsfront, std::find_if_not(s.rbegin(), std::string::const_reverse_iterator(wsfront), [](int c) { return std::isspace(c); }).base());
-    }
-
-    void delS(char *p)
-    {
-        if (p != nullptr)
-            delete[] p;
-    }
-
-    char *newS(size_t len)
-    {
-        char *p = new char[len];
-        memset(p, 0, len);
-        return p;
-    }
-
-    char *newS(char *p, size_t len)
-    {
-        delS(p);
-        p = newS(len);
-        return p;
-    }
-
-    char *newS(char *p, size_t len, char *d)
-    {
-        delS(p);
-        p = newS(len);
-        strcpy(p, d);
-        return p;
-    }
-
-    std::vector<std::string> splitString(int size, const char *str, const char delim)
-    {
-        uint16_t index = 0;
-        uint16_t len = strlen(str);
-        int buffSize = (int)(size * 1.4f);
-        char *buf = newS(buffSize);
-        std::vector<std::string> out;
-
-        for (uint16_t i = 0; i < len; i++)
-        {
-            if (str[i] == delim)
+            else
             {
-                buf = newS(buf, buffSize);
-                strncpy(buf, (char *)str + index, i - index);
-                buf[i - index] = '\0';
-                index = i + 1;
-                out.push_back(buf);
+                nidx++;
+                hidx++;
+                if (nidx == nlen)
+                    return hidx - nidx;
             }
         }
-        if (index < len + 1)
+
+        return -1;
+    }
+
+    int strpos(const char *haystack, char needle, int offset)
+    {
+        if (!haystack || needle == 0)
+            return -1;
+
+        int hlen = strlen(haystack);
+
+        if (hlen == 0)
+            return -1;
+
+        int hidx = offset;
+        while ((*(haystack + hidx) != '\0') && hidx < hlen)
         {
-            buf = newS(buf, buffSize);
-            strncpy(buf, (char *)str + index, len - index);
-            buf[len - index] = '\0';
-            out.push_back(buf);
+            if (needle == *(haystack + hidx))
+                return hidx;
+            hidx++;
         }
 
-        delS(buf);
-        return out;
+        return -1;
+    }
+
+    int rstrpos(const char *haystack, const char *needle, int offset /* start search from this offset to the left string */)
+    {
+        if (!haystack || !needle)
+            return -1;
+
+        int hlen = strlen(haystack);
+        int nlen = strlen(needle);
+
+        if (hlen == 0 || nlen == 0)
+            return -1;
+
+        int hidx = offset;
+
+        if (hidx >= hlen || offset == -1)
+            hidx = hlen - 1;
+
+        int nidx = nlen - 1;
+
+        while (hidx >= 0)
+        {
+            if (*(needle + nidx) != *(haystack + hidx))
+            {
+                hidx--;
+                nidx = nlen - 1;
+            }
+            else
+            {
+                if (nidx == 0)
+                    return hidx + nidx;
+                nidx--;
+                hidx--;
+            }
+        }
+
+        return -1;
+    }
+
+    int rstrpos(const char *haystack, char needle, int offset /* start search from this offset to the left char */)
+    {
+        if (!haystack || needle == 0)
+            return -1;
+
+        int hlen = strlen(haystack);
+
+        if (hlen == 0)
+            return -1;
+
+        int hidx = offset;
+
+        if (hidx >= hlen || offset == -1)
+            hidx = hlen - 1;
+
+        while (hidx >= 0)
+        {
+            if (needle == *(haystack + hidx))
+                return hidx;
+            hidx--;
+        }
+
+        return -1;
+    }
+
+    void ltrim(MBSTRING &str, const MBSTRING &chars = " ")
+    {
+        size_t pos = str.find_first_not_of(chars);
+        if (pos != MBSTRING::npos)
+            str.erase(0, pos);
+    }
+
+    void rtrim(MBSTRING &str, const MBSTRING &chars = " ")
+    {
+        size_t pos = str.find_last_not_of(chars);
+        if (pos != MBSTRING::npos)
+            str.erase(pos + 1);
+    }
+
+    inline MBSTRING trim(const MBSTRING &s)
+    {
+        MBSTRING chars = " ";
+        MBSTRING str = s;
+        ltrim(str, chars);
+        rtrim(str, chars);
+        return str;
+    }
+
+    void delP(void *ptr)
+    {
+        void **p = (void **)ptr;
+        if (*p)
+        {
+            free(*p);
+            *p = 0;
+        }
+    }
+
+    size_t getReservedLen(size_t len)
+    {
+        int blen = len + 1;
+
+        int newlen = (blen / 4) * 4;
+
+        if (newlen < blen)
+            newlen += 4;
+
+        return (size_t)newlen;
+    }
+
+    void *newP(size_t len)
+    {
+        void *p;
+        size_t newLen = getReservedLen(len);
+#if defined(BOARD_HAS_PSRAM) && defined(ESP_SIGNER_USE_PSRAM)
+
+        if ((p = (void *)ps_malloc(newLen)) == 0)
+            return NULL;
+
+#else
+
+#if defined(ESP8266_USE_EXTERNAL_HEAP)
+        ESP.setExternalHeap();
+#endif
+
+        bool nn = ((p = (void *)malloc(newLen)) > 0);
+
+#if defined(ESP8266_USE_EXTERNAL_HEAP)
+        ESP.resetHeap();
+#endif
+
+        if (!nn)
+            return NULL;
+
+#endif
+        memset(p, 0, newLen);
+        return p;
+    }
+
+    void substr(MBSTRING &str, const char *s, int offset, size_t len)
+    {
+        if (!s)
+            return;
+
+        int slen = strlen(s);
+
+        if (slen == 0)
+            return;
+
+        int last = offset + len;
+
+        if (offset >= slen || len == 0 || last > slen)
+            return;
+
+        for (int i = offset; i < last; i++)
+            str += s[i];
+    }
+    void splitString(const char *str, std::vector<MBSTRING> out, const char delim)
+    {
+        int current = 0, previous = 0;
+        current = strpos(str, delim, 0);
+        MBSTRING s;
+        while (current != -1)
+        {
+            s.clear();
+            substr(s, str, previous, current - previous);
+            trim(s);
+            if (s.length() > 0)
+                out.push_back(s);
+
+            previous = current + 1;
+            current = strpos(str, delim, previous);
+            delay(0);
+        }
+
+        s.clear();
+
+        if (previous > 0 && current == -1)
+            substr(s, str, previous, strlen(str) - previous);
+        else
+            s = str;
+
+        trim(s);
+        if (s.length() > 0)
+            out.push_back(s);
+        s.clear();
     }
 
     int url_decode(const char *s, char *dec)
@@ -322,37 +454,32 @@ public:
         return o - dec;
     }
 
-    std::string url_encode(std::string s)
+    MBSTRING url_encode(const MBSTRING &s)
     {
-        const char *str = s.c_str();
-        std::vector<char> v(s.size());
-        v.clear();
+        MBSTRING ret;
+        ret.reserve(s.length() * 3 + 1);
         for (size_t i = 0, l = s.size(); i < l; i++)
         {
-            char c = str[i];
+            char c = s[i];
             if ((c >= '0' && c <= '9') ||
                 (c >= 'A' && c <= 'Z') ||
                 (c >= 'a' && c <= 'z') ||
                 c == '-' || c == '_' || c == '.' || c == '!' || c == '~' ||
                 c == '*' || c == '\'' || c == '(' || c == ')')
             {
-                v.push_back(c);
-            }
-            else if (c == ' ')
-            {
-                v.push_back('+');
+                ret += c;
             }
             else
             {
-                v.push_back('%');
+                ret += '%';
                 unsigned char d1, d2;
                 hexchar(c, d1, d2);
-                v.push_back(d1);
-                v.push_back(d2);
+                ret += d1;
+                ret += d2;
             }
         }
-
-        return std::string(v.cbegin(), v.cend());
+        ret.shrink_to_fit();
+        return ret;
     }
 
     inline int ishex(int x)
@@ -409,7 +536,7 @@ public:
             if (tmp)
             {
                 response.connection = tmp;
-                delS(tmp);
+                delP(&tmp);
             }
             if (pmax < beginPos)
                 pmax = beginPos;
@@ -418,7 +545,7 @@ public:
             if (tmp)
             {
                 response.contentType = tmp;
-                delS(tmp);
+                delP(&tmp);
             }
 
             if (pmax < beginPos)
@@ -428,7 +555,7 @@ public:
             if (tmp)
             {
                 response.contentLen = atoi(tmp);
-                delS(tmp);
+                delP(&tmp);
             }
 
             if (pmax < beginPos)
@@ -440,7 +567,7 @@ public:
                 response.transferEnc = tmp;
                 if (stringCompare(tmp, 0, esp_signer_pgm_str_8))
                     response.isChunkedEnc = true;
-                delS(tmp);
+                delP(&tmp);
             }
 
             if (pmax < beginPos)
@@ -450,7 +577,7 @@ public:
             if (tmp)
             {
                 response.connection = tmp;
-                delS(tmp);
+                delP(&tmp);
             }
 
             if (pmax < beginPos)
@@ -461,7 +588,7 @@ public:
             {
 
                 response.payloadLen = atoi(tmp);
-                delS(tmp);
+                delP(&tmp);
             }
 
             if (response.httpCode == ESP_SIGNER_ERROR_HTTP_CODE_OK || response.httpCode == ESP_SIGNER_ERROR_HTTP_CODE_TEMPORARY_REDIRECT || response.httpCode == ESP_SIGNER_ERROR_HTTP_CODE_PERMANENT_REDIRECT || response.httpCode == ESP_SIGNER_ERROR_HTTP_CODE_MOVED_PERMANENTLY || response.httpCode == ESP_SIGNER_ERROR_HTTP_CODE_FOUND)
@@ -473,7 +600,7 @@ public:
                 if (tmp)
                 {
                     response.location = tmp;
-                    delS(tmp);
+                    delP(&tmp);
                 }
             }
 
@@ -487,13 +614,41 @@ public:
         int res = -1;
         char c = 0;
         int idx = 0;
+        if (!stream)
+            return idx;
         while (stream->available() && idx <= bufLen)
         {
+            if (!stream)
+                break;
             res = stream->read();
             if (res > -1)
             {
                 c = (char)res;
                 strcat_c(buf, c);
+                idx++;
+                if (c == '\n')
+                    return idx;
+            }
+        }
+        return idx;
+    }
+
+    int readLine(WiFiClient *stream, MBSTRING &buf)
+    {
+        int res = -1;
+        char c = 0;
+        int idx = 0;
+        if (!stream)
+            return idx;
+        while (stream->available())
+        {
+            if (!stream)
+                break;
+            res = stream->read();
+            if (res > -1)
+            {
+                c = (char)res;
+                buf += c;
                 idx++;
                 if (c == '\n')
                     return idx;
@@ -515,26 +670,26 @@ public:
             chunkState = 1;
             chunkedSize = -1;
             dataLen = 0;
-            buf = newS(bufLen);
+            buf = (char *)newP(bufLen);
             int readLen = readLine(stream, buf, bufLen);
             if (readLen)
             {
                 tmp = strP(esp_signer_pgm_str_10);
                 p1 = strpos(buf, tmp, 0);
-                delS(tmp);
+                delP(&tmp);
                 if (p1 == -1)
                 {
                     tmp = strP(esp_signer_pgm_str_4);
                     p1 = strpos(buf, tmp, 0);
-                    delS(tmp);
+                    delP(&tmp);
                 }
 
                 if (p1 != -1)
                 {
-                    tmp = newS(p1 + 1);
+                    tmp = (char *)newP(p1 + 1);
                     memcpy(tmp, buf, p1);
                     chunkedSize = hex2int(tmp);
-                    delS(tmp);
+                    delP(&tmp);
                 }
 
                 //last chunk
@@ -544,14 +699,14 @@ public:
             else
                 chunkState = 0;
 
-            delS(buf);
+            delP(&buf);
         }
         else
         {
 
             if (chunkedSize > -1)
             {
-                buf = newS(bufLen);
+                buf = (char *)newP(bufLen);
                 int readLen = readLine(stream, buf, bufLen);
 
                 if (readLen > 0)
@@ -577,7 +732,84 @@ public:
                     olen = -1;
                 }
 
-                delS(buf);
+                delP(&buf);
+            }
+        }
+
+        return olen;
+    }
+
+    int readChunkedData(WiFiClient *stream, MBSTRING &out, int &chunkState, int &chunkedSize, int &dataLen)
+    {
+
+        char *tmp = nullptr;
+        int p1 = 0;
+        int olen = 0;
+
+        if (chunkState == 0)
+        {
+            chunkState = 1;
+            chunkedSize = -1;
+            dataLen = 0;
+            MBSTRING s;
+            int readLen = readLine(stream, s);
+            if (readLen)
+            {
+                tmp = strP(esp_signer_pgm_str_10);
+                p1 = strpos(s.c_str(), tmp, 0);
+                delP(&tmp);
+                if (p1 == -1)
+                {
+                    tmp = strP(esp_signer_pgm_str_4);
+                    p1 = strpos(s.c_str(), tmp, 0);
+                    delP(&tmp);
+                }
+
+                if (p1 != -1)
+                {
+                    tmp = (char *)newP(p1 + 1);
+                    memcpy(tmp, s.c_str(), p1);
+                    chunkedSize = hex2int(tmp);
+                    delP(&tmp);
+                }
+
+                //last chunk
+                if (chunkedSize < 1)
+                    olen = -1;
+            }
+            else
+                chunkState = 0;
+        }
+        else
+        {
+
+            if (chunkedSize > -1)
+            {
+                MBSTRING s;
+                int readLen = readLine(stream, s);
+
+                if (readLen > 0)
+                {
+                    //chunk may contain trailing
+                    if (dataLen + readLen - 2 < chunkedSize)
+                    {
+                        dataLen += readLen;
+                        out += s;
+                        olen = readLen;
+                    }
+                    else
+                    {
+                        if (chunkedSize - dataLen > 0)
+                            out += s;
+                        dataLen = chunkedSize;
+                        chunkState = 0;
+                        olen = readLen;
+                    }
+                }
+                else
+                {
+                    olen = -1;
+                }
             }
         }
 
@@ -590,7 +822,7 @@ public:
         char *tmp = strP(beginH);
         int p1 = strpos(buf, tmp, beginPos);
         int ofs = 0;
-        delS(tmp);
+        delP(&tmp);
         if (p1 != -1)
         {
             tmp = strP(endH);
@@ -610,13 +842,13 @@ public:
             if (p2 == -1)
                 p2 = strlen(buf);
 
-            delS(tmp);
+            delP(&tmp);
 
             if (p2 != -1)
             {
                 beginPos = p2 + ofs;
                 int len = p2 - p1 - strlen_P(beginH);
-                tmp = newS(len + 1);
+                tmp = (char *)newP(len + 1);
                 memcpy(tmp, &buf[p1 + strlen_P(beginH)], len);
                 return tmp;
             }
@@ -625,54 +857,70 @@ public:
         return nullptr;
     }
 
-    void createDirs(std::string dirs, esp_signer_mem_storage_type storageType)
+    void getHeaderStr(const MBSTRING &in, MBSTRING &out, PGM_P beginH, PGM_P endH, int &beginPos, int endPos)
     {
-        std::string dir = "";
-        size_t count = 0;
-        for (size_t i = 0; i < dirs.length(); i++)
-        {
-            dir.append(1, dirs[i]);
-            count++;
-            if (dirs[i] == '/')
-            {
-                if (dir.length() > 0)
-                {
-                    if (storageType == esp_signer_mem_storage_type_sd)
-                        SD_FS.mkdir(dir.substr(0, dir.length() - 1).c_str());
-                }
+        MBSTRING _in = in;
 
-                count = 0;
+        char *tmp = strP(beginH);
+        int p1 = strpos(in.c_str(), tmp, beginPos);
+        int ofs = 0;
+        delP(&tmp);
+        if (p1 != -1)
+        {
+            tmp = strP(endH);
+            int p2 = -1;
+            if (endPos > 0)
+                p2 = endPos;
+            else if (endPos == 0)
+            {
+                ofs = strlen_P(endH);
+                p2 = strpos(in.c_str(), tmp, p1 + strlen_P(beginH) + 1);
+            }
+            else if (endPos == -1)
+            {
+                beginPos = p1 + strlen_P(beginH);
+            }
+
+            if (p2 == -1)
+                p2 = in.length();
+
+            delP(&tmp);
+
+            if (p2 != -1)
+            {
+                beginPos = p2 + ofs;
+                int len = p2 - p1 - strlen_P(beginH);
+                out = _in.substr(p1 + strlen_P(beginH), len);
             }
         }
-        if (count > 0)
-        {
-            if (storageType == esp_signer_mem_storage_type_sd)
-                SD_FS.mkdir(dir.c_str());
-        }
-        std::string().swap(dir);
     }
 
     void closeFileHandle(bool sd)
     {
+        if (!config)
+            return;
+
         if (config->_int.esp_signer_file)
             config->_int.esp_signer_file.close();
         if (sd)
         {
             config->_int.esp_signer_sd_used = false;
             config->_int.esp_signer_sd_rdy = false;
+#if defined SD_FS
             SD_FS.end();
+#endif
         }
     }
 
-    bool decodeBase64Str(const std::string src, std::vector<uint8_t> &out)
+    bool decodeBase64Str(const MBSTRING &src, std::vector<uint8_t> &out)
     {
-        unsigned char *dtable = new unsigned char[256];
+        unsigned char *dtable = (unsigned char *)newP(256);
         memset(dtable, 0x80, 256);
         for (size_t i = 0; i < sizeof(esp_signer_base64_table) - 1; i++)
             dtable[esp_signer_base64_table[i]] = (unsigned char)i;
         dtable['='] = 0;
 
-        unsigned char *block = new unsigned char[4];
+        unsigned char *block = (unsigned char *)newP(4);
         unsigned char tmp;
         size_t i, count;
         int pad = 0;
@@ -733,26 +981,26 @@ public:
             }
         }
 
-        delete[] block;
-        delete[] dtable;
+        delP(&block);
+        delP(&dtable);
 
         return true;
 
     exit:
-        delete[] block;
-        delete[] dtable;
+        delP(&block);
+        delP(&dtable);
         return false;
     }
 
     bool decodeBase64Flash(const char *src, size_t len, fs::File &file)
     {
-        unsigned char *dtable = new unsigned char[256];
+        unsigned char *dtable = (unsigned char *)newP(256);
         memset(dtable, 0x80, 256);
         for (size_t i = 0; i < sizeof(esp_signer_base64_table) - 1; i++)
             dtable[esp_signer_base64_table[i]] = (unsigned char)i;
         dtable['='] = 0;
 
-        unsigned char *block = new unsigned char[4];
+        unsigned char *block = (unsigned char *)newP(4);
         unsigned char tmp;
         size_t i, count;
         int pad = 0;
@@ -808,25 +1056,33 @@ public:
             }
         }
 
-        delete[] block;
-        delete[] dtable;
+        delP(&block);
+        delP(&dtable);
 
         return true;
 
     exit:
-        delete[] block;
-        delete[] dtable;
+        delP(&block);
+        delP(&dtable);
 
         return false;
     }
 
-    void sendBase64Stream(WiFiClient *client, const std::string &filePath, uint8_t storageType, fs::File &file)
+    void sendBase64Stream(WiFiClient *client, const MBSTRING &filePath, uint8_t storageType, fs::File &file)
     {
 
         if (storageType == esp_signer_mem_storage_type_flash)
+        {
+#if defined FLASH_FS
             file = FLASH_FS.open(filePath.c_str(), "r");
+#endif
+        }
         else if (storageType == esp_signer_mem_storage_type_sd)
+        {
+#if defined SD_FS
             file = SD_FS.open(filePath.c_str(), FILE_READ);
+#endif
+        }
 
         if (!file)
             return;
@@ -836,12 +1092,12 @@ public:
         size_t byteAdd = 0;
         size_t byteSent = 0;
 
-        unsigned char *buff = new unsigned char[chunkSize];
+        unsigned char *buff = (unsigned char *)newP(chunkSize);
         memset(buff, 0, chunkSize);
 
         size_t len = file.size();
         size_t fbuffIndex = 0;
-        unsigned char *fbuff = new unsigned char[3];
+        unsigned char *fbuff = (unsigned char *)newP(3);
 
         while (file.available())
         {
@@ -909,19 +1165,19 @@ public:
             client->write(buff, byteAdd);
         }
 
-        delete[] buff;
-        delete[] fbuff;
+        delP(&buff);
+        delP(&fbuff);
     }
 
     bool decodeBase64Stream(const char *src, size_t len, fs::File &file)
     {
-        unsigned char *dtable = new unsigned char[256];
+        unsigned char *dtable = (unsigned char *)newP(256);
         memset(dtable, 0x80, 256);
         for (size_t i = 0; i < sizeof(esp_signer_base64_table) - 1; i++)
             dtable[esp_signer_base64_table[i]] = (unsigned char)i;
         dtable['='] = 0;
 
-        unsigned char *block = new unsigned char[4];
+        unsigned char *block = (unsigned char *)newP(4);
         unsigned char tmp;
         size_t i, count;
         int pad = 0;
@@ -979,15 +1235,15 @@ public:
             }
         }
 
-        delete[] block;
-        delete[] dtable;
+        delP(&block);
+        delP(&dtable);
 
         return true;
 
     exit:
 
-        delete[] block;
-        delete[] dtable;
+        delP(&block);
+        delP(&dtable);
 
         return false;
     }
@@ -995,17 +1251,20 @@ public:
     bool stringCompare(const char *buf, int ofs, PGM_P beginH)
     {
         char *tmp = strP(beginH);
-        char *tmp2 = newS(strlen_P(beginH) + 1);
+        char *tmp2 = (char *)newP(strlen_P(beginH) + 1);
         memcpy(tmp2, &buf[ofs], strlen_P(beginH));
         tmp2[strlen_P(beginH)] = 0;
         bool ret = (strcmp(tmp, tmp2) == 0);
-        delS(tmp);
-        delS(tmp2);
+        delP(&tmp);
+        delP(&tmp2);
         return ret;
     }
 
     bool setClock(float gmtOffset)
     {
+        if (!config)
+            return false;
+
         if (time(nullptr) > default_ts && gmtOffset == config->_int.esp_signer_gmt_offset)
             return true;
 
@@ -1018,10 +1277,8 @@ public:
 
         if (!config->_int.esp_signer_clock_rdy || gmtOffset != config->_int.esp_signer_gmt_offset)
         {
-            char *server1 = strP(esp_signer_pgm_str_11);
-            char *server2 = strP(esp_signer_pgm_str_12);
 
-            configTime(gmtOffset * 3600, 0, server1, server2);
+            configTime(gmtOffset * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
             now = time(nullptr);
             unsigned long timeout = millis();
@@ -1032,9 +1289,6 @@ public:
                     break;
                 delay(10);
             }
-
-            delS(server1);
-            delS(server2);
         }
 
         config->_int.esp_signer_clock_rdy = now > default_ts;
@@ -1049,7 +1303,7 @@ public:
         size_t i;
         char *p = encoded;
 
-        unsigned char *b64enc = new unsigned char[65];
+        unsigned char *b64enc = (unsigned char *)newP(65);
         strcpy_P((char *)b64enc, (char *)esp_signer_base64_table);
         b64enc[62] = '-';
         b64enc[63] = '_';
@@ -1078,33 +1332,122 @@ public:
 
         *p++ = '\0';
 
-        delete[] b64enc;
+        delP(&b64enc);
     }
 
-    std::string encodeBase64Str(const unsigned char *src, size_t len)
+    bool sendBase64(uint8_t *data, size_t len, bool flashMem, ESP_SIGNER_TCP_Client *client)
+    {
+        bool ret = false;
+        const unsigned char *end, *in;
+
+        end = data + len;
+        in = data;
+
+        size_t chunkSize = 256;
+        size_t byteAdded = 0;
+        size_t byteSent = 0;
+
+        unsigned char *buf = (unsigned char *)newP(chunkSize);
+        memset(buf, 0, chunkSize);
+
+        unsigned char *tmp = (unsigned char *)newP(3);
+
+        while (end - in >= 3)
+        {
+            memset(tmp, 0, 3);
+            if (flashMem)
+                memcpy_P(tmp, in, 3);
+            else
+                memcpy(tmp, in, 3);
+
+            buf[byteAdded++] = esp_signer_base64_table[tmp[0] >> 2];
+            buf[byteAdded++] = esp_signer_base64_table[((tmp[0] & 0x03) << 4) | (tmp[1] >> 4)];
+            buf[byteAdded++] = esp_signer_base64_table[((tmp[1] & 0x0f) << 2) | (tmp[2] >> 6)];
+            buf[byteAdded++] = esp_signer_base64_table[tmp[2] & 0x3f];
+
+            if (byteAdded >= chunkSize - 4)
+            {
+                byteSent += byteAdded;
+
+                if (client->send((const char *)buf) != 0)
+                    goto ex;
+                memset(buf, 0, chunkSize);
+                byteAdded = 0;
+            }
+
+            in += 3;
+        }
+
+        if (byteAdded > 0)
+        {
+            if (client->send((const char *)buf) != 0)
+                goto ex;
+        }
+
+        if (end - in)
+        {
+            memset(buf, 0, chunkSize);
+            byteAdded = 0;
+            memset(tmp, 0, 3);
+            if (flashMem)
+            {
+                if (end - in == 1)
+                    memcpy_P(tmp, in, 1);
+                else
+                    memcpy_P(tmp, in, 2);
+            }
+            else
+            {
+                if (end - in == 1)
+                    memcpy(tmp, in, 1);
+                else
+                    memcpy(tmp, in, 2);
+            }
+
+            buf[byteAdded++] = esp_signer_base64_table[tmp[0] >> 2];
+            if (end - in == 1)
+            {
+                buf[byteAdded++] = esp_signer_base64_table[(tmp[0] & 0x03) << 4];
+                buf[byteAdded++] = '=';
+            }
+            else
+            {
+                buf[byteAdded++] = esp_signer_base64_table[((tmp[0] & 0x03) << 4) | (tmp[1] >> 4)];
+                buf[byteAdded++] = esp_signer_base64_table[(tmp[1] & 0x0f) << 2];
+            }
+            buf[byteAdded++] = '=';
+
+            if (client->send((const char *)buf) != 0)
+                goto ex;
+            memset(buf, 0, chunkSize);
+        }
+
+        ret = true;
+    ex:
+
+        delP(&tmp);
+        delP(&buf);
+        return ret;
+    }
+
+    MBSTRING encodeBase64Str(const unsigned char *src, size_t len)
     {
         return encodeBase64Str((uint8_t *)src, len);
     }
 
-    std::string encodeBase64Str(uint8_t *src, size_t len)
+    MBSTRING encodeBase64Str(uint8_t *src, size_t len)
     {
         unsigned char *out, *pos;
         const unsigned char *end, *in;
 
-        unsigned char *b64enc = new unsigned char[65];
+        unsigned char *b64enc = (unsigned char *)newP(65);
         strcpy_P((char *)b64enc, (char *)esp_signer_base64_table);
 
         size_t olen;
 
         olen = 4 * ((len + 2) / 3); /* 3-byte blocks to 4-byte */
 
-        if (olen < len)
-        {
-            delete[] b64enc;
-            return std::string();
-        }
-
-        std::string outStr;
+        MBSTRING outStr;
         outStr.resize(olen);
         out = (unsigned char *)&outStr[0];
 
@@ -1141,16 +1484,22 @@ public:
             *pos++ = '=';
         }
 
-        delete[] b64enc;
+        delP(&b64enc);
         return outStr;
     }
+
     size_t base64EncLen(size_t len)
     {
         return ((len + 2) / 3 * 4) + 1;
     }
 
+#if defined(CARD_TYPE_SD)
     bool sdBegin(int8_t ss, int8_t sck, int8_t miso, int8_t mosi)
     {
+#if defined SD_FS
+        if (!config)
+            return false;
+
         if (config)
         {
             config->_int.sd_config.sck = sck;
@@ -1172,10 +1521,35 @@ public:
         else
             return SD_FS.begin(SD_CS_PIN);
 #endif
+#else
+        return false;
+#endif
     }
+#endif
+
+#if defined(ESP32)
+#if defined(CARD_TYPE_SD_MMC)
+    bool sdBegin(const char *mountpoint, bool mode1bit, bool format_if_mount_failed)
+    {
+        if (!config)
+            return false;
+
+        if (config)
+        {
+            config->_int.sd_config.sd_mmc_mountpoint = mountpoint;
+            config->_int.sd_config.sd_mmc_mode1bit = mode1bit;
+            config->_int.sd_config.sd_mmc_format_if_mount_failed = format_if_mount_failed;
+        }
+        return SD_FS.begin(mountpoint, mode1bit, format_if_mount_failed);
+    }
+#endif
+#endif
 
     bool flashTest()
     {
+#if defined FLASH_FS
+        if (!config)
+            return false;
 #if defined(ESP32)
         if (FORMAT_FLASH == 1)
             config->_int.esp_signer_flash_rdy = FLASH_FS.begin(true);
@@ -1185,15 +1559,28 @@ public:
         config->_int.esp_signer_flash_rdy = FLASH_FS.begin();
 #endif
         return config->_int.esp_signer_flash_rdy;
+#else
+        return false;
+#endif
     }
 
     bool sdTest(fs::File file)
     {
-        std::string filepath = "/sdtest01.txt";
-
-        if (!sdBegin(config->_int.sd_config.ss, config->_int.sd_config.sck, config->_int.sd_config.miso, config->_int.sd_config.mosi))
+#if defined SD_FS
+        if (!config)
             return false;
 
+        MBSTRING filepath = "/sdtest01.txt";
+#if defined(CARD_TYPE_SD)
+        if (!sdBegin(config->_int.sd_config.ss, config->_int.sd_config.sck, config->_int.sd_config.miso, config->_int.sd_config.mosi))
+            return false;
+#endif
+#if defined(ESP32)
+#if defined(CARD_TYPE_SD_MMC)
+        if (!sdBegin(config->_int.sd_config.sd_mmc_mountpoint, config->_int.sd_config.sd_mmc_mode1bit, config->_int.sd_config.sd_mmc_format_if_mount_failed))
+            return false;
+#endif
+#endif
         file = SD_FS.open(filepath.c_str(), FILE_WRITE);
         if (!file)
             return false;
@@ -1222,23 +1609,29 @@ public:
 
         SD_FS.remove(filepath.c_str());
 
-        std::string().swap(filepath);
+        MBSTRING().swap(filepath);
+
+        config->_int.esp_signer_sd_rdy = true;
 
         return true;
+#else
+        return false;
+#endif
     }
 
 #if defined(ESP8266)
     void set_scheduled_callback(esp_signer_callback_function_t callback)
     {
-        _callback_function = std::move([callback]() { schedule_function(callback); });
+        _callback_function = std::move([callback]()
+                                       { schedule_function(callback); });
         _callback_function();
     }
 #endif
 
-    std::string getBoundary(size_t len)
+    MBSTRING getBoundary(size_t len)
     {
         char *tmp = strP(esp_signer_boundary_table);
-        char *buf = newS(len);
+        char *buf = (char *)newP(len);
         if (len)
         {
             --len;
@@ -1251,9 +1644,9 @@ public:
             }
             buf[len] = '\0';
         }
-        std::string s = buf;
-        delS(buf);
-        delS(tmp);
+        MBSTRING s = buf;
+        delP(&buf);
+        delP(&tmp);
         return s;
     }
 
@@ -1271,7 +1664,7 @@ public:
         {
             if (millis() - wTime > 3000)
             {
-                httpCode = ESP_SIGNER_ERROR_HTTPC_ERROR_CONNECTION_INUSED;
+                httpCode = ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_INUSED;
                 return false;
             }
             delay(0);
@@ -1280,12 +1673,12 @@ public:
         return true;
     }
 
-    void splitTk(const std::string &str, std::vector<std::string> &tk, const char *delim)
+    void splitTk(const MBSTRING &str, std::vector<MBSTRING> &tk, const char *delim)
     {
         std::size_t current, previous = 0;
         current = str.find(delim, previous);
-        std::string s;
-        while (current != std::string::npos)
+        MBSTRING s;
+        while (current != MBSTRING::npos)
         {
             s = str.substr(previous, current - previous);
             tk.push_back(s);
@@ -1294,72 +1687,7 @@ public:
         }
         s = str.substr(previous, current - previous);
         tk.push_back(s);
-        std::string().swap(s);
-    }
-
-    void replaceAll(std::string &str, const std::string &from, const std::string &to)
-    {
-        if (from.empty())
-            return;
-        size_t start_pos = 0;
-        while ((start_pos = str.find(from, start_pos)) != std::string::npos)
-        {
-            str.replace(start_pos, from.length(), to);
-            start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
-        }
-    }
-
-    bool validJS(const char *c)
-    {
-        size_t ob = 0, cb = 0, os = 0, cs = 0;
-        for (size_t i = 0; i < strlen(c); i++)
-        {
-            if (c[i] == '{')
-                ob++;
-            else if (c[i] == '}')
-                cb++;
-            else if (c[i] == '[')
-                os++;
-            else if (c[i] == ']')
-                cs++;
-        }
-        return (ob == cb && os == cs);
-    }
-
-    void getUrlInfo(const std::string url, struct esp_signer_url_info_t &info)
-    {
-        char *host = newS(url.length() + 5);
-        char *uri = newS(url.length() + 5);
-
-        int p1 = 0;
-        char *tmp = strP(esp_signer_pgm_str_107);
-        int x = sscanf(url.c_str(), tmp, host, uri);
-        delS(tmp);
-        tmp = strP(esp_signer_pgm_str_108);
-        x ? p1 = 8 : x = sscanf(url.c_str(), tmp, host, uri);
-        delS(tmp);
-        tmp = strP(esp_signer_pgm_str_109);
-        x ? p1 = 7 : x = sscanf(url.c_str(), tmp, host, uri);
-        delS(tmp);
-
-        int p2 = 0;
-        if (x > 0)
-        {
-            tmp = strP(esp_signer_pgm_str_111);
-            p2 = strpos(host, tmp, 0);
-            delS(tmp);
-            if (p2 > -1)
-            {
-                tmp = strP(esp_signer_pgm_str_110);
-                x = sscanf(url.c_str() + p1, tmp, host, uri);
-                delS(tmp);
-            }
-        }
-
-        info.uri = uri;
-        info.host = host;
-        delS(uri);
-        delS(host);
+        MBSTRING().swap(s);
     }
 
     bool reconnect(unsigned long dataTime)

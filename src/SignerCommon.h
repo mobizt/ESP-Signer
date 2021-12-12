@@ -40,12 +40,12 @@
 
 #if defined(ESP32)
 #include <WiFi.h>
-#include "wcs/esp32/ESP_Signer_HTTPClient32.h"
+#include "wcs/esp32/ESP_Signer_TCP_Client.h"
 #elif defined(ESP8266)
 #include <Schedule.h>
 #include <ets_sys.h>
 #include <ESP8266WiFi.h>
-#include "wcs/esp8266/ESP_Signer_HTTPClient.h"
+#include "wcs/esp8266/ESP_Signer_TCP_Client.h"
 #define FS_NO_GLOBALS
 #endif
 
@@ -89,10 +89,25 @@ enum esp_signer_jwt_generation_step
     esp_signer_jwt_generation_step_exchange
 };
 
+typedef struct esp_signer_spi_ethernet_module_t
+{
+#if defined(ESP8266) && defined(ESP8266_CORE_SDK_V3_X_X)
+#ifdef INC_ENC28J60_LWIP
+    ENC28J60lwIP *enc28j60;
+#endif
+#ifdef INC_W5100_LWIP
+    Wiznet5100lwIP *w5100;
+#endif
+#ifdef INC_W5500_LWIP
+    Wiznet5500lwIP *w5500;
+#endif
+#endif
+} SPI_ETH_Module;
+
 struct esp_signer_url_info_t
 {
-    std::string host;
-    std::string uri;
+    MBSTRING host;
+    MBSTRING uri;
 };
 
 struct esp_signer_server_response_data_t
@@ -104,24 +119,24 @@ struct esp_signer_server_response_data_t
     int payloadOfs = 0;
     bool noContent = false;
     bool isChunkedEnc = false;
-    std::string location = "";
-    std::string contentType = "";
-    std::string connection = "";
-    std::string transferEnc = "";
+    MBSTRING location = "";
+    MBSTRING contentType = "";
+    MBSTRING connection = "";
+    MBSTRING transferEnc = "";
 };
 
 struct esp_signer_auth_token_error_t
 {
-    std::string message;
+    MBSTRING message;
     int code = 0;
 };
 
 struct esp_signer_auth_token_info_t
 {
-    std::string access_token;
-    std::string auth_type;
-    std::string jwt;
-    std::string scope;
+    MBSTRING access_token;
+    MBSTRING auth_type;
+    MBSTRING jwt;
+    MBSTRING scope;
     unsigned long expires = 0;
     unsigned long last_millis = 0;
     esp_signer_auth_token_type token_type = esp_signer_token_type_undefined;
@@ -131,29 +146,29 @@ struct esp_signer_auth_token_info_t
 
 struct esp_signer_service_account_data_info_t
 {
-    std::string client_email;
-    std::string client_id;
-    std::string project_id;
-    std::string private_key_id;
+    MBSTRING client_email;
+    MBSTRING client_id;
+    MBSTRING project_id;
+    MBSTRING private_key_id;
     const char *private_key = "";
 };
 
 struct esp_signer_auth_signin_user_t
 {
-    std::string email;
-    std::string password;
+    MBSTRING email;
+    MBSTRING password;
 };
 
 struct esp_signer_auth_cert_t
 {
     const char *data = "";
-    std::string file;
+    MBSTRING file;
     esp_signer_mem_storage_type file_storage = esp_signer_mem_storage_type_flash;
 };
 
 struct esp_signer_service_account_file_info_t
 {
-    std::string path;
+    MBSTRING path;
     esp_signer_mem_storage_type storage_type = esp_signer_mem_storage_type_flash;
 };
 
@@ -172,7 +187,7 @@ struct esp_signer_token_signer_resources_t
     unsigned long preRefreshSeconds = 60;
     unsigned long expiredSeconds = 3600;
     unsigned long reqTO = 2000;
-    std::string pk;
+    MBSTRING pk;
     size_t hashSize = 32; //SHA256 size (256 bits or 32 bytes)
     size_t signatureSize = 256;
 #if defined(ESP32)
@@ -181,22 +196,20 @@ struct esp_signer_token_signer_resources_t
     char *hash = nullptr;
 #endif
     unsigned char *signature = nullptr;
-    std::string header;
-    std::string payload;
-    std::string encHeader;
-    std::string encPayload;
-    std::string encHeadPayload;
-    std::string encSignature;
+    MBSTRING encHeader;
+    MBSTRING encPayload;
+    MBSTRING encHeadPayload;
+    MBSTRING encSignature;
 #if defined(ESP32)
     mbedtls_pk_context *pk_ctx = nullptr;
     mbedtls_entropy_context *entropy_ctx = nullptr;
     mbedtls_ctr_drbg_context *ctr_drbg_ctx = nullptr;
-    ESP_Signer_HTTPClient32 *wcs = nullptr;
+    ESP_SIGNER_TCP_Client *wcs = nullptr;
 #elif defined(ESP8266)
     WiFiClientSecure *wcs = nullptr;
 #endif
     FirebaseJson *json = nullptr;
-    FirebaseJsonData *data = nullptr;
+    FirebaseJsonData *result = nullptr;
     struct esp_signer_auth_token_info_t tokens;
 };
 
@@ -210,17 +223,37 @@ struct esp_signer_cfg_int_t
     bool esp_signer_sd_used = false;
     bool esp_signer_reconnect_wifi = false;
     unsigned long esp_signer_last_reconnect_millis = 0;
+    unsigned long esp_signer_last_jwt_begin_step_millis = 0;
     uint16_t esp_signer_reconnect_tmo = WIFI_RECONNECT_TIMEOUT;
     bool esp_signer_clock_rdy = false;
     float esp_signer_gmt_offset = 0;
     const char *esp_signer_caCert = nullptr;
     bool esp_signer_processing = false;
+    unsigned long esp_signer_last_jwt_generation_error_cb_millis = 0;
 
 #if defined(ESP32)
     TaskHandle_t token_processing_task_handle = NULL;
 #endif
 };
 
+struct esp_signer_client_timeout_t
+{
+    //WiFi reconnect timeout (interval) in ms (10 sec - 5 min) when WiFi disconnected.
+    uint16_t wifiReconnect = 10 * 1000;
+
+    //Socket connection and ssl handshake timeout in ms (1 sec - 1 min).
+    unsigned long socketConnection = 10 * 1000;
+
+    //unused.
+    unsigned long sslHandshake = 0;
+
+    //Server response read timeout in ms (1 sec - 1 min).
+    unsigned long serverResponse = 10 * 1000;
+
+    uint16_t tokenGenerationBeginStep = 300;
+
+    uint16_t tokenGenerationError = 5*1000;
+};
 
 typedef struct token_info_t
 {
@@ -240,6 +273,8 @@ struct esp_signer_cfg_t
     struct esp_signer_cfg_int_t _int;
     TokenStatusCallback token_status_callback = NULL;
     int8_t max_token_generation_retry = MAX_EXCHANGE_TOKEN_ATTEMPTS;
+    SPI_ETH_Module spi_ethernet_module;
+    struct esp_signer_client_timeout_t timeout;
 };
 
 
@@ -248,14 +283,14 @@ struct esp_signer_session_info_t
     bool buffer_ovf = false;
     bool chunked_encoding = false;
     bool connected = false;
-    std::string host = "";
+    MBSTRING host = "";
     unsigned long last_conn_ms = 0;
     const uint32_t conn_timeout = 3 * 60 * 1000;
 
     uint16_t resp_size = 2048;
     int http_code = -1000;
     int content_length = 0;
-    std::string error = "";
+    MBSTRING error = "";
 
 #if defined(ESP8266)
     uint16_t bssl_rx_size = 512;
@@ -277,8 +312,8 @@ static const char esp_signer_pgm_str_7[] PROGMEM = "Transfer-Encoding: ";
 static const char esp_signer_pgm_str_8[] PROGMEM = "chunked";
 static const char esp_signer_pgm_str_9[] PROGMEM = "Location: ";
 static const char esp_signer_pgm_str_10[] PROGMEM = ";";
-static const char esp_signer_pgm_str_11[] PROGMEM = "pool.ntp.org";
-static const char esp_signer_pgm_str_12[] PROGMEM = "time.nist.gov";
+static const char esp_signer_pgm_str_11[] PROGMEM = "0.0.0.0";
+static const char esp_signer_pgm_str_12[] PROGMEM = "error_description";
 static const char esp_signer_pgm_str_13[] PROGMEM = "type";
 static const char esp_signer_pgm_str_14[] PROGMEM = "service_account";
 static const char esp_signer_pgm_str_15[] PROGMEM = "project_id";

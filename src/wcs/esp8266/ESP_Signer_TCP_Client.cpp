@@ -1,8 +1,11 @@
 /**
- * HTTP Client wrapper v1.0.1
+ * ESP Signer TCP Client v1.0.0
+ * 
+ * Created December 11, 2021
  * 
  * The MIT License (MIT)
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
+ * 
  * 
  * Permission is hereby granted, free of charge, to any person returning a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -22,30 +25,25 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#ifndef ESP_SIGNER_HTTPClient_CPP
-#define ESP_SIGNER_HTTPClient_CPP
+#ifndef ESP_SIGNER_TCP_Client_CPP
+#define ESP_SIGNER_TCP_Client_CPP
 
 #ifdef ESP8266
 
-#include "ESP_Signer_HTTPClient.h"
+#include "ESP_Signer_TCP_Client.h"
 
-ESP_Signer_HTTPClient::ESP_Signer_HTTPClient()
+ESP_SIGNER_TCP_Client::ESP_SIGNER_TCP_Client()
 {
 }
 
-ESP_Signer_HTTPClient::~ESP_Signer_HTTPClient()
+ESP_SIGNER_TCP_Client::~ESP_SIGNER_TCP_Client()
 {
-  if (_wcs)
-  {
-    _wcs->stop();
-    _wcs.reset(nullptr);
-    _wcs.release();
-  }
-  std::string().swap(_host);
-  std::string().swap(_CAFile);
+  release();
+  MBSTRING().swap(_host);
+  MBSTRING().swap(_CAFile);
 }
 
-bool ESP_Signer_HTTPClient::begin(const char *host, uint16_t port)
+bool ESP_SIGNER_TCP_Client::begin(const char *host, uint16_t port)
 {
   if (strcmp(_host.c_str(), host) != 0)
     mflnChecked = false;
@@ -72,55 +70,38 @@ bool ESP_Signer_HTTPClient::begin(const char *host, uint16_t port)
   return true;
 }
 
-bool ESP_Signer_HTTPClient::connected()
+bool ESP_SIGNER_TCP_Client::connected()
 {
   if (_wcs)
     return (_wcs->connected());
   return false;
 }
 
-bool ESP_Signer_HTTPClient::send(const char *header)
+int ESP_SIGNER_TCP_Client::send(const char *data, size_t len)
 {
-  if (!connected())
-    return false;
-  return (_wcs->write((uint8_t *)header, strlen(header)) == strlen(header));
-}
+  if (!connect())
+    return ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_REFUSED;
 
-int ESP_Signer_HTTPClient::send(const char *header, const char *payload)
-{
-  size_t size = strlen(payload);
-  if (strlen(header) > 0)
-  {
-    if (!connect())
-    {
-      return ESP_SIGNER_ERROR_HTTPC_ERROR_CONNECTION_REFUSED;
-    }
+  if (len == 0)
+    len = strlen(data);
 
-    if (!send(header))
-    {
-      return ESP_SIGNER_ERROR_HTTPC_ERROR_SEND_HEADER_FAILED;
-    }
-  }
+  if (len == 0)
+    return 0;
 
-  if (size > 0)
-  {
-    if (_wcs->write((uint8_t *)&payload[0], size) != size)
-    {
-      return ESP_SIGNER_ERROR_HTTPC_ERROR_SEND_PAYLOAD_FAILED;
-    }
-  }
+  if (_wcs->write((const uint8_t *)data, len) != len)
+    return ESP_SIGNER_ERROR_TCP_ERROR_SEND_PAYLOAD_FAILED;
 
   return 0;
 }
 
-WiFiClient *ESP_Signer_HTTPClient::stream(void)
+WiFiClient *ESP_SIGNER_TCP_Client::stream(void)
 {
   if (connected())
     return _wcs.get();
   return nullptr;
 }
 
-bool ESP_Signer_HTTPClient::connect(void)
+bool ESP_SIGNER_TCP_Client::connect(void)
 {
   if (connected())
   {
@@ -129,20 +110,39 @@ bool ESP_Signer_HTTPClient::connect(void)
     return true;
   }
 
+  _wcs->setTimeout(timeout);
+
   if (!_wcs->connect(_host.c_str(), _port))
     return false;
 
   return connected();
 }
 
-void ESP_Signer_HTTPClient::setCACert(const char *caCert)
+void ESP_SIGNER_TCP_Client::release()
 {
+  if (_wcs)
+  {
+    _wcs->stop();
+    _wcs.reset(nullptr);
+    _wcs.release();
+  }
+  if (x509)
+    delete x509;
+}
+
+void ESP_SIGNER_TCP_Client::setCACert(const char *caCert)
+{
+
+  release();
+
+  _wcs = std::unique_ptr<ESP_SIGNER_ESP_SSL_CLIENT>(new ESP_SIGNER_ESP_SSL_CLIENT());
 
   _wcs->setBufferSizes(_bsslRxSize, _bsslTxSize);
 
   if (caCert)
   {
-    _wcs->setTrustAnchors(new X509List(caCert));
+    x509 = new X509List(caCert);
+    _wcs->setTrustAnchors(x509);
     _certType = 1;
   }
   else
@@ -154,7 +154,7 @@ void ESP_Signer_HTTPClient::setCACert(const char *caCert)
   _wcs->setNoDelay(true);
 }
 
-void ESP_Signer_HTTPClient::setCACertFile(const char *caCertFile, uint8_t storageType, struct esp_signer_sd_config_info_t sd_config)
+void ESP_SIGNER_TCP_Client::setCACertFile(const char *caCertFile, uint8_t storageType, struct esp_signer_sd_config_info_t sd_config)
 {
   _sdPin = sd_config.ss;
   _wcs->setBufferSizes(_bsslRxSize, _bsslTxSize);
@@ -164,25 +164,29 @@ void ESP_Signer_HTTPClient::setCACertFile(const char *caCertFile, uint8_t storag
     fs::File f;
     if (storageType == 1)
     {
+#if defined FLASH_FS
       FLASH_FS.begin();
       if (FLASH_FS.exists(caCertFile))
         f = FLASH_FS.open(caCertFile, "r");
+#endif
     }
     else if (storageType == 2)
     {
+#if defined SD_FS
       SD_FS.begin(_sdPin);
       if (SD_FS.exists(caCertFile))
         f = SD_FS.open(caCertFile, FILE_READ);
+#endif
     }
     if (f)
     {
-        size_t len = f.size();
-        uint8_t *der = new uint8_t[len];
-        if (f.available())
-          f.read(der, len);
-        f.close();
-        _wcs->setTrustAnchors(new X509List(der, len));
-        delete[] der;
+      size_t len = f.size();
+      uint8_t *der = new uint8_t[len];
+      if (f.available())
+        f.read(der, len);
+      f.close();
+      _wcs->setTrustAnchors(new X509List(der, len));
+      delete[] der;
     }
     _certType = 2;
   }
@@ -191,4 +195,4 @@ void ESP_Signer_HTTPClient::setCACertFile(const char *caCertFile, uint8_t storag
 
 #endif /* ESP8266 */
 
-#endif /* ESP_Signer_HTTPClient_CPP */
+#endif /* ESP_SIGNER_TCP_Client_CPP */

@@ -60,7 +60,7 @@
 
 #define FS_NO_GLOBALS
 #include <FS.h>
-#include "FS_Config.h"
+#include "../../FS_Config.h"
 
 #if defined DEFAULT_FLASH_FS
 #define FLASH_FS DEFAULT_FLASH_FS
@@ -74,7 +74,7 @@
 #define FIREBASEJSON_USE_PSRAM
 #endif
 
-#include "./json/FirebaseJson.h"
+#include "../../json/FirebaseJson.h"
 
 #if defined __has_include
 
@@ -102,7 +102,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-#include "wcs/HTTPCode.h"
+#include "../HTTPCode.h"
 
 struct esp_signer_sd_config_info_t
 {

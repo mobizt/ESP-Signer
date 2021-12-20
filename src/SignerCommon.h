@@ -1,6 +1,6 @@
 
 /**
- * Created April 4, 2021
+ * Created December 12, 2021
  * 
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
  * 
@@ -36,16 +36,16 @@
 #include <functional>
 
 #include <FS.h>
-#include "json/FirebaseJson.h"
+#include "./json/FirebaseJson.h"
 
 #if defined(ESP32)
 #include <WiFi.h>
-#include "wcs/esp32/ESP_Signer_TCP_Client.h"
+#include "./wcs/esp32/ESP_Signer_TCP_Client.h"
 #elif defined(ESP8266)
 #include <Schedule.h>
 #include <ets_sys.h>
 #include <ESP8266WiFi.h>
-#include "wcs/esp8266/ESP_Signer_TCP_Client.h"
+#include "./wcs/esp8266/ESP_Signer_TCP_Client.h"
 #define FS_NO_GLOBALS
 #endif
 
@@ -302,8 +302,8 @@ typedef struct esp_signer_cfg_t SignerConfig;
 
 typedef std::function<void(void)> esp_signer_callback_function_t;
 
-static const char esp_signer_pgm_str_1[] PROGMEM = "true";
-static const char esp_signer_pgm_str_2[] PROGMEM = "double";
+//static const char esp_signer_pgm_str_1[] PROGMEM = "true";
+//static const char esp_signer_pgm_str_2[] PROGMEM = "double";
 static const char esp_signer_pgm_str_3[] PROGMEM = "Connection: ";
 static const char esp_signer_pgm_str_4[] PROGMEM = "\r\n";
 static const char esp_signer_pgm_str_5[] PROGMEM = "Content-Type: ";
@@ -320,7 +320,7 @@ static const char esp_signer_pgm_str_15[] PROGMEM = "project_id";
 static const char esp_signer_pgm_str_16[] PROGMEM = "private_key_id";
 static const char esp_signer_pgm_str_17[] PROGMEM = "private_key";
 static const char esp_signer_pgm_str_18[] PROGMEM = "client_email";
-static const char esp_signer_pgm_str_19[] PROGMEM = "client_email";
+static const char esp_signer_pgm_str_19[] PROGMEM = "client_id";
 static const char esp_signer_pgm_str_20[] PROGMEM = "tokenProcessingTask";
 static const char esp_signer_pgm_str_21[] PROGMEM = "system time was not set";
 static const char esp_signer_pgm_str_22[] PROGMEM = "RSA private key parsing failed";
@@ -364,7 +364,7 @@ static const char esp_signer_pgm_str_59[] PROGMEM = "urn:ietf:params:oauth:grant
 static const char esp_signer_pgm_str_60[] PROGMEM = "assertion";
 static const char esp_signer_pgm_str_61[] PROGMEM = " HTTP/1.1\r\n";
 static const char esp_signer_pgm_str_62[] PROGMEM = "Host: ";
-static const char esp_signer_pgm_str_63[] PROGMEM = "\r\n";
+//static const char esp_signer_pgm_str_63[] PROGMEM = "\r\n";
 static const char esp_signer_pgm_str_64[] PROGMEM = "User-Agent: ESP\r\n";
 static const char esp_signer_pgm_str_65[] PROGMEM = "Content-Length: ";
 static const char esp_signer_pgm_str_66[] PROGMEM = "Content-Type: ";

@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.1.0
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.1.2
  * 
  * This library used RS256 for signing algorithm.
  * 
@@ -7,7 +7,7 @@
  * 
  * This library supports Espressif ESP8266 and ESP32
  * 
- * Created November 12, 2021
+ * Created December 20, 2021
  * 
  * This work is a part of Firebase ESP Client library
  * Copyright (c) 2021 K. Suwatchai (Mobizt)
@@ -143,9 +143,10 @@ bool ESP_Signer::parseSAFile()
 
                     if (parseJsonResponse(esp_signer_pgm_str_17))
                     {
-                        tmp = (char *)ut->newP(strlen(config->signer.result->to<const char *>()));
+                        size_t len = strlen(config->signer.result->to<const char *>());
+                        tmp = (char *)ut->newP(len);
                         size_t c = 0;
-                        for (size_t i = 0; i < strlen(config->signer.result->to<const char *>()); i++)
+                        for (size_t i = 0; i < len; i++)
                         {
                             if (config->signer.result->to<const char *>()[i] == '\\')
                             {
@@ -1123,15 +1124,15 @@ bool ESP_Signer::requestTokens()
     ut->appendP(req, esp_signer_pgm_str_42);
     ut->appendP(req, esp_signer_pgm_str_43);
 
-    ut->appendP(req, esp_signer_pgm_str_63);
+    ut->appendP(req, esp_signer_pgm_str_4);
     ut->appendP(req, esp_signer_pgm_str_64);
     ut->appendP(req, esp_signer_pgm_str_65);
     req += NUM2S(strlen(config->signer.json->raw())).get();
-    ut->appendP(req, esp_signer_pgm_str_63);
+    ut->appendP(req, esp_signer_pgm_str_4);
     ut->appendP(req, esp_signer_pgm_str_66);
     ut->appendP(req, esp_signer_pgm_str_67);
-    ut->appendP(req, esp_signer_pgm_str_63);
-    ut->appendP(req, esp_signer_pgm_str_63);
+    ut->appendP(req, esp_signer_pgm_str_4);
+    ut->appendP(req, esp_signer_pgm_str_4);
 
     req += config->signer.json->raw();
 #if defined(ESP32)
@@ -1171,6 +1172,12 @@ bool ESP_Signer::requestTokens()
 
             if (parseJsonResponse(esp_signer_pgm_str_12))
                 error.message = config->signer.result->to<const char *>();
+        }
+
+        if (error.code != 0 && config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token)
+        {
+            //new jwt needed as it is already cleared
+            config->signer.step = esp_signer_jwt_generation_step_encode_header_payload;
         }
 
         config->signer.tokens.error = error;

@@ -39,14 +39,13 @@
 #include <SPIFFS.h>
 #include <SD.h>
 #include <ETH.h>
-#include "FS_Config.h"
+#include "../../FS_Config.h"
 #include <WiFiClientSecure.h>
 
 #if defined(ESP_SIGNER_USE_PSRAM)
 #define FIREBASEJSON_USE_PSRAM
 #endif
-#include "./json/FirebaseJson.h"
-
+#include "../../json/FirebaseJson.h"
 
 #if __has_include(<esp_idf_version.h>)
 #include <esp_idf_version.h>
@@ -62,7 +61,7 @@
 #endif
 #define FORMAT_FLASH FORMAT_FLASH_IF_MOUNT_FAILED
 
-#include "wcs/HTTPCode.h"
+#include "../HTTPCode.h"
 
 static const char esp_idf_branch_str[] PROGMEM = "release/v";
 

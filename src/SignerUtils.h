@@ -1628,32 +1628,6 @@ public:
     }
 #endif
 
-    MBSTRING getBoundary(size_t len)
-    {
-        char *tmp = strP(esp_signer_boundary_table);
-        char *buf = (char *)newP(len);
-        if (len)
-        {
-            --len;
-            buf[0] = tmp[0];
-            buf[1] = tmp[1];
-            for (size_t n = 2; n < len; n++)
-            {
-                int key = rand() % (int)(strlen(tmp) - 1);
-                buf[n] = tmp[key];
-            }
-            buf[len] = '\0';
-        }
-        MBSTRING s = buf;
-        delP(&buf);
-        delP(&tmp);
-        return s;
-    }
-
-    bool boolVal(const char *v)
-    {
-        return strposP(v, esp_signer_pgm_str_1, 0) > -1;
-    }
 
     bool waitIdle(int &httpCode)
     {
@@ -1695,25 +1669,47 @@ public:
 
         bool status = WiFi.status() == WL_CONNECTED;
 
+        if (config)
+            status |= ethLinkUp(&config->spi_ethernet_module);
+
         if (dataTime > 0)
         {
-            if (millis() - dataTime > 30000)
-                return false;
+            if (config)
+            {
+                if (config->timeout.serverResponse < 1000 || config->timeout.serverResponse > 1000)
+                    config->timeout.serverResponse = 10000;
+
+                if (millis() - dataTime > config->timeout.serverResponse)
+                    return false;
+            }
+            else
+            {
+                if (millis() - dataTime > 10 * 1000)
+                    return false;
+            }
         }
 
         if (!status)
         {
 
-            if (config->_int.esp_signer_reconnect_wifi)
+            if (config)
             {
-                if (millis() - config->_int.esp_signer_last_reconnect_millis > config->_int.esp_signer_reconnect_tmo)
+                if (config->_int.esp_signer_reconnect_wifi)
                 {
-                    WiFi.reconnect();
-                    config->_int.esp_signer_last_reconnect_millis = millis();
+                    if (config->timeout.wifiReconnect < 10000 || config->timeout.wifiReconnect > 5 *60 *1000)
+                        config->timeout.wifiReconnect = 10000;
+                    if (millis() - config->_int.esp_signer_last_reconnect_millis > config->timeout.wifiReconnect)
+                    {
+                        WiFi.reconnect();
+                        config->_int.esp_signer_last_reconnect_millis = millis();
+                    }
                 }
             }
 
             status = WiFi.status() == WL_CONNECTED;
+
+            if (config)
+                status |= ethLinkUp(&config->spi_ethernet_module);
         }
 
         return status;

@@ -1,4 +1,4 @@
-# Google OAuth2.0 Access Token generation Arduino Library v1.1.2
+# Google OAuth2.0 Access Token generation Arduino Library v1.1.3
 
 
 This is the library will create the OAuth2.0 access token used in the Google API's http request (REST).

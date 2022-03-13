@@ -1,38 +1,35 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.1.2
- * 
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.1.3
+ *
  * This library used RS256 for signing algorithm.
- * 
+ *
  * The signed JWT token will be generated and exchanged with the access token in the final generating process.
- * 
+ *
  * This library supports Espressif ESP8266 and ESP32
- * 
- * Created December 20, 2021
- * 
- * This work is a part of Firebase ESP Client library
- * Copyright (c) 2021 K. Suwatchai (Mobizt)
- * 
+ *
+ * Created March 12, 2022
+ *
  * The MIT License (MIT)
- * Copyright (c) 2021 K. Suwatchai (Mobizt)
- * 
- * 
+ * Copyright (c) 2022 K. Suwatchai (Mobizt)
+ *
+ *
  * Permission is hereby granted, free of charge, to any person returning a copy of
  * this software and associated documentation files (the "Software"), to deal in
  * the Software without restriction, including without limitation the rights to
  * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
  * the Software, and to permit persons to whom the Software is furnished to do so,
  * subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
  * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
+ */
 
 #ifndef ESP_SIGNER_CPP
 #define ESP_SIGNER_CPP
@@ -623,7 +620,7 @@ bool ESP_Signer::handleTokenResponse(int &httpCode)
     int chunkedDataState = 0;
     int chunkedDataSize = 0;
     int chunkedDataLen = 0;
-    MBSTRING header, payload;
+    MB_String header, payload;
     bool isHeader = false;
 #if defined(ESP32)
     WiFiClient *stream = config->signer.wcs->stream();
@@ -795,7 +792,7 @@ bool ESP_Signer::createJWT()
         ut->delP(&tmp);
         ut->delP(&tmp2);
 
-        MBSTRING hdr;
+        MB_String hdr;
         config->signer.json->toString(hdr);
         size_t len = ut->base64EncLen(hdr.length());
         char *buf = (char *)ut->newP(len);
@@ -814,7 +811,7 @@ bool ESP_Signer::createJWT()
         config->signer.json->add(tmp, config->service_account.data.client_email.c_str());
         ut->delP(&tmp);
         tmp = ut->strP(esp_signer_pgm_str_39);
-        MBSTRING t;
+        MB_String t;
         ut->appendP(t, esp_signer_pgm_str_40);
         if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token)
         {
@@ -844,11 +841,11 @@ bool ESP_Signer::createJWT()
         if (config->signer.tokens.token_type == esp_signer_token_type_oauth2_access_token)
         {
 
-            MBSTRING s;
+            MB_String s;
 
             if (config->signer.tokens.scope.length() > 0)
             {
-                std::vector<MBSTRING> scopes = std::vector<MBSTRING>();
+                std::vector<MB_String> scopes = std::vector<MB_String>();
                 ut->splitTk(config->signer.tokens.scope, scopes, ",");
                 for (size_t i = 0; i < scopes.size(); i++)
                 {
@@ -865,7 +862,7 @@ bool ESP_Signer::createJWT()
             ut->delP(&tmp);
         }
 
-        MBSTRING payload;
+        MB_String payload;
         config->signer.json->toString(payload);
 
         len = ut->base64EncLen(payload.length());
@@ -1083,7 +1080,7 @@ bool ESP_Signer::requestTokens()
     config->signer.json = new FirebaseJson();
     config->signer.result = new FirebaseJsonData();
 
-    MBSTRING host;
+    MB_String host;
     ut->appendP(host, esp_signer_pgm_str_48);
     ut->appendP(host, esp_signer_pgm_str_42);
     ut->appendP(host, esp_signer_pgm_str_43);
@@ -1099,7 +1096,7 @@ bool ESP_Signer::requestTokens()
         return handleSignerError(1);
 #endif
 
-    MBSTRING req;
+    MB_String req;
     ut->appendP(req, esp_signer_pgm_str_57);
     ut->appendP(req, esp_signer_pgm_str_32);
 
@@ -1127,7 +1124,7 @@ bool ESP_Signer::requestTokens()
     ut->appendP(req, esp_signer_pgm_str_4);
     ut->appendP(req, esp_signer_pgm_str_64);
     ut->appendP(req, esp_signer_pgm_str_65);
-    req += NUM2S(strlen(config->signer.json->raw())).get();
+    req += num2Str(strlen(config->signer.json->raw()), 0);
     ut->appendP(req, esp_signer_pgm_str_4);
     ut->appendP(req, esp_signer_pgm_str_66);
     ut->appendP(req, esp_signer_pgm_str_67);
@@ -1273,7 +1270,7 @@ String ESP_Signer::getTokenType(TokenInfo info)
     if (!config)
         return "";
 
-    MBSTRING s;
+    MB_String s;
     switch (info.type)
     {
     case esp_signer_token_type_undefined:
@@ -1298,7 +1295,7 @@ String ESP_Signer::getTokenStatus(TokenInfo info)
     if (!config)
         return "";
 
-    MBSTRING s;
+    MB_String s;
     switch (info.status)
     {
     case esp_signer_token_status_uninitialized:
@@ -1339,9 +1336,9 @@ String ESP_Signer::getTokenError(TokenInfo info)
     if (!config)
         return "";
 
-    MBSTRING s;
+    MB_String s;
     ut->appendP(s, esp_signer_pgm_str_114);
-    s += NUM2S(info.error.code).get();
+    s += num2Str(info.error.code, 0);
     ut->appendP(s, esp_signer_pgm_str_115);
     s += info.error.message;
     return s.c_str();
@@ -1363,7 +1360,7 @@ void ESP_Signer::refreshToken()
     checkToken();
 }
 
-void ESP_Signer::errorToString(int httpCode, MBSTRING &buff)
+void ESP_Signer::errorToString(int httpCode, MB_String &buff)
 {
     buff.clear();
 

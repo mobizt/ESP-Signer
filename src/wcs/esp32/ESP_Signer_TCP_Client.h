@@ -4,7 +4,7 @@
  * Created December 11, 2021
  * 
  * The MIT License (MIT)
- * Copyright (c) 2021 K. Suwatchai (Mobizt)
+ * Copyright (c) 2022 K. Suwatchai (Mobizt)
  * 
  * 
  * Copyright (c) 2015 Markus Sattler. All rights reserved.
@@ -154,13 +154,13 @@ public:
 
 private:
   std::unique_ptr<ESP_SIGNER_WCS> _wcs = std::unique_ptr<ESP_SIGNER_WCS>(new ESP_SIGNER_WCS());
-  MBSTRING _host;
+  MB_String _host;
   uint16_t _port = 0;
 
   //lwIP socket connection and ssl handshake timeout
   unsigned long timeout = 10 * 1000;
 
-  MBSTRING _CAFile;
+  MB_String _CAFile;
   uint8_t _CAFileStoreageType = 0;
   int _certType = -1;
   bool _clockReady = false;

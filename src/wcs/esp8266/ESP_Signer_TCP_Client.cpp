@@ -4,7 +4,7 @@
  * Created December 11, 2021
  * 
  * The MIT License (MIT)
- * Copyright (c) 2021 K. Suwatchai (Mobizt)
+ * Copyright (c) 2022 K. Suwatchai (Mobizt)
  * 
  * 
  * Permission is hereby granted, free of charge, to any person returning a copy of
@@ -39,8 +39,8 @@ ESP_SIGNER_TCP_Client::ESP_SIGNER_TCP_Client()
 ESP_SIGNER_TCP_Client::~ESP_SIGNER_TCP_Client()
 {
   release();
-  MBSTRING().swap(_host);
-  MBSTRING().swap(_CAFile);
+  MB_String().swap(_host);
+  MB_String().swap(_CAFile);
 }
 
 bool ESP_SIGNER_TCP_Client::begin(const char *host, uint16_t port)

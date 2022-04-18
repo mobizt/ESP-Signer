@@ -1,29 +1,29 @@
 
 /**
- * Created March 12, 2022
- * 
- * 
+ * Created April 18, 2022
+ *
+ *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
- * 
- * 
+ *
+ *
  * Permission is hereby granted, free of charge, to any person returning a copy of
  * this software and associated documentation files (the "Software"), to deal in
  * the Software without restriction, including without limitation the rights to
  * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
  * the Software, and to permit persons to whom the Software is furnished to do so,
  * subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
  * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
+ */
 
 #ifndef FB_COMMON_H_
 #define FB_COMMON_H_
@@ -47,7 +47,6 @@
 #include "./wcs/esp8266/ESP_Signer_TCP_Client.h"
 #define FS_NO_GLOBALS
 #endif
-
 
 #define SD_CS_PIN 15
 #define MAX_REDIRECT 5
@@ -187,7 +186,7 @@ struct esp_signer_token_signer_resources_t
     unsigned long expiredSeconds = 3600;
     unsigned long reqTO = 2000;
     MB_String pk;
-    size_t hashSize = 32; //SHA256 size (256 bits or 32 bytes)
+    size_t hashSize = 32; // SHA256 size (256 bits or 32 bytes)
     size_t signatureSize = 256;
 #if defined(ESP32)
     uint8_t *hash = nullptr;
@@ -205,13 +204,12 @@ struct esp_signer_token_signer_resources_t
     mbedtls_ctr_drbg_context *ctr_drbg_ctx = nullptr;
     ESP_SIGNER_TCP_Client *wcs = nullptr;
 #elif defined(ESP8266)
-    WiFiClientSecure *wcs = nullptr;
+    ESP_SIGNER_TCP_Client *wcs = nullptr;
 #endif
     FirebaseJson *json = nullptr;
     FirebaseJsonData *result = nullptr;
     struct esp_signer_auth_token_info_t tokens;
 };
-
 
 struct esp_signer_cfg_int_t
 {
@@ -225,6 +223,7 @@ struct esp_signer_cfg_int_t
     unsigned long esp_signer_last_jwt_begin_step_millis = 0;
     uint16_t esp_signer_reconnect_tmo = WIFI_RECONNECT_TIMEOUT;
     bool esp_signer_clock_rdy = false;
+    bool esp_signer_clock_init = false;
     float esp_signer_gmt_offset = 0;
     const char *esp_signer_caCert = nullptr;
     bool esp_signer_processing = false;
@@ -237,21 +236,21 @@ struct esp_signer_cfg_int_t
 
 struct esp_signer_client_timeout_t
 {
-    //WiFi reconnect timeout (interval) in ms (10 sec - 5 min) when WiFi disconnected.
+    // WiFi reconnect timeout (interval) in ms (10 sec - 5 min) when WiFi disconnected.
     uint16_t wifiReconnect = 10 * 1000;
 
-    //Socket connection and ssl handshake timeout in ms (1 sec - 1 min).
+    // Socket connection and ssl handshake timeout in ms (1 sec - 1 min).
     unsigned long socketConnection = 10 * 1000;
 
-    //unused.
+    // unused.
     unsigned long sslHandshake = 0;
 
-    //Server response read timeout in ms (1 sec - 1 min).
+    // Server response read timeout in ms (1 sec - 1 min).
     unsigned long serverResponse = 10 * 1000;
 
     uint16_t tokenGenerationBeginStep = 300;
 
-    uint16_t tokenGenerationError = 5*1000;
+    uint16_t tokenGenerationError = 5 * 1000;
 };
 
 typedef struct token_info_t
@@ -275,7 +274,6 @@ struct esp_signer_cfg_t
     SPI_ETH_Module spi_ethernet_module;
     struct esp_signer_client_timeout_t timeout;
 };
-
 
 struct esp_signer_session_info_t
 {
@@ -301,8 +299,8 @@ typedef struct esp_signer_cfg_t SignerConfig;
 
 typedef std::function<void(void)> esp_signer_callback_function_t;
 
-//static const char esp_signer_pgm_str_1[] PROGMEM = "true";
-//static const char esp_signer_pgm_str_2[] PROGMEM = "double";
+// static const char esp_signer_pgm_str_1[] PROGMEM = "true";
+// static const char esp_signer_pgm_str_2[] PROGMEM = "double";
 static const char esp_signer_pgm_str_3[] PROGMEM = "Connection: ";
 static const char esp_signer_pgm_str_4[] PROGMEM = "\r\n";
 static const char esp_signer_pgm_str_5[] PROGMEM = "Content-Type: ";
@@ -363,7 +361,7 @@ static const char esp_signer_pgm_str_59[] PROGMEM = "urn:ietf:params:oauth:grant
 static const char esp_signer_pgm_str_60[] PROGMEM = "assertion";
 static const char esp_signer_pgm_str_61[] PROGMEM = " HTTP/1.1\r\n";
 static const char esp_signer_pgm_str_62[] PROGMEM = "Host: ";
-//static const char esp_signer_pgm_str_63[] PROGMEM = "\r\n";
+// static const char esp_signer_pgm_str_63[] PROGMEM = "\r\n";
 static const char esp_signer_pgm_str_64[] PROGMEM = "User-Agent: ESP\r\n";
 static const char esp_signer_pgm_str_65[] PROGMEM = "Content-Length: ";
 static const char esp_signer_pgm_str_66[] PROGMEM = "Content-Type: ";

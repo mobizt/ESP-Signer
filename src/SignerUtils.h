@@ -1,33 +1,33 @@
 /**
- * Util class, SignerUtils.h version 1.0.2
- * 
- * 
- * Created March 13, 2022
- * 
+ * Util class, SignerUtils.h version 1.0.4
+ *
+ *
+ * Created April 18, 2022
+ *
  * This work is a part of ESP Signer library
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
- * 
+ *
  * The MIT License (MIT)
  * Copyright (c)2022 K. Suwatchai (Mobizt)
- * 
- * 
+ *
+ *
  * Permission is hereby granted, free of charge, to any person returning a copy of
  * this software and associated documentation files (the "Software"), to deal in
  * the Software without restriction, including without limitation the rights to
  * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
  * the Software, and to permit persons to whom the Software is furnished to do so,
  * subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
  * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
+ */
 
 #ifndef SIGNER_UTILS_H
 #define SIGNER_UTILS_H
@@ -174,15 +174,6 @@ public:
         }
 
         return nullptr;
-    }
-
-    void appendP(MB_String &buf, PGM_P p, bool empty = false)
-    {
-        if (empty)
-            buf.clear();
-        char *b = strP(p);
-        buf += b;
-        delP(&b);
     }
 
     void strcat_c(char *str, char c)
@@ -691,7 +682,7 @@ public:
                     delP(&tmp);
                 }
 
-                //last chunk
+                // last chunk
                 if (chunkedSize < 1)
                     olen = -1;
             }
@@ -710,7 +701,7 @@ public:
 
                 if (readLen > 0)
                 {
-                    //chunk may contain trailing
+                    // chunk may contain trailing
                     if (dataLen + readLen - 2 < chunkedSize)
                     {
                         dataLen += readLen;
@@ -772,7 +763,7 @@ public:
                     delP(&tmp);
                 }
 
-                //last chunk
+                // last chunk
                 if (chunkedSize < 1)
                     olen = -1;
             }
@@ -789,7 +780,7 @@ public:
 
                 if (readLen > 0)
                 {
-                    //chunk may contain trailing
+                    // chunk may contain trailing
                     if (dataLen + readLen - 2 < chunkedSize)
                     {
                         dataLen += readLen;
@@ -1276,18 +1267,15 @@ public:
 
         if (!config->_int.esp_signer_clock_rdy || gmtOffset != config->_int.esp_signer_gmt_offset)
         {
+            if (gmtOffset != config->_int.esp_signer_gmt_offset)
+                config->_int.esp_signer_clock_init = false;
 
-            configTime(gmtOffset * 3600, 0, "pool.ntp.org", "time.nist.gov");
+            if (!config->_int.esp_signer_clock_init)
+                configTime(gmtOffset * 3600, 0, "pool.ntp.org", "time.nist.gov");
+
+            config->_int.esp_signer_clock_init = true;
 
             now = time(nullptr);
-            unsigned long timeout = millis();
-            while (now < default_ts)
-            {
-                now = time(nullptr);
-                if (now > default_ts || millis() - timeout > ntpTimeout)
-                    break;
-                delay(10);
-            }
         }
 
         config->_int.esp_signer_clock_rdy = now > default_ts;
@@ -1627,7 +1615,6 @@ public:
     }
 #endif
 
-
     bool waitIdle(int &httpCode)
     {
 #if defined(ESP32)
@@ -1695,7 +1682,7 @@ public:
             {
                 if (config->_int.esp_signer_reconnect_wifi)
                 {
-                    if (config->timeout.wifiReconnect < 10000 || config->timeout.wifiReconnect > 5 *60 *1000)
+                    if (config->timeout.wifiReconnect < 10000 || config->timeout.wifiReconnect > 5 * 60 * 1000)
                         config->timeout.wifiReconnect = 10000;
                     if (millis() - config->_int.esp_signer_last_reconnect_millis > config->timeout.wifiReconnect)
                     {

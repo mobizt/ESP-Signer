@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.1.3
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.1.4
  * 
  * This library used RS256 for signing algorithm.
  * 
@@ -7,7 +7,7 @@
  * 
  * This library supports Espressif ESP8266 and ESP32
  * 
- * Created March 12, 2022
+ * Created April 18, 2022
  * 
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -146,7 +146,7 @@ public:
  */
     bool sdMMCBegin(const char *mountpoint = "/sdcard", bool mode1bit = false, bool format_if_mount_failed = false);
 
-private:
+protected:
     SignerUtils *ut = nullptr;
     SignerConfig *config = nullptr;
     esp_signer_callback_function_t _cb = nullptr;

@@ -6,10 +6,14 @@
 #include <ESP8266WiFi.h>
 #endif
 
-#include "ESPSigner.h"
+#include <ESPSigner.h>
+
+// For SD card configuration and mounting
+#include <ESP_Signer_SD_helper.h> // See src/ESP_Signer_SD_helper.h
 
 #define WIFI_SSID "WiFi SSID"
 #define WIFI_PASSWORD "WIFi PSK"
+
 
 SignerConfig config;
 
@@ -36,6 +40,9 @@ void setup()
     Serial.println(WiFi.localIP());
     Serial.println();
 
+    // Mount SD card.
+    SD_Card_Mounting(); // See src/ESP_Signer_SD_helper.h
+
     /* The file systems for flash and SD/SDMMC can be changed in FS_Config.h. */
 
     /** Assign the sevice account JSON file and the file storage type (required) 
@@ -45,7 +52,7 @@ void setup()
     // See https://github.com/mobizt/ESP-Signer#how-to-create-service-account-private-key
 
     config.service_account.json.path = "/service_account_file.json"; //change this for your json file
-    config.service_account.json.storage_type = esp_signer_mem_storage_type_flash; //or esp_signer_mem_storage_type_sd
+    config.service_account.json.storage_type = esp_signer_mem_storage_type_sd; //or esp_signer_mem_storage_type_sd
 
     /** Expired period in seconds (optional). 
      * Default is 3600 sec.
@@ -67,6 +74,7 @@ void setup()
 
     //To set the device time without NTP time acquisition.
     //Signer.setSystemTime(<timestamp>);
+    
 
     /* Create token */
     Signer.begin(&config);

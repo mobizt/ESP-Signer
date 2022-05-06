@@ -1,7 +1,7 @@
 /**
- * ESP Signer TCP Client v1.0.1
+ * Firebase TCP Client v1.1.20
  *
- * Created April 18, 2022
+ * Created April 17, 2022
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -25,168 +25,60 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef ESP_SIGNER_TCP_Client_H
-#define ESP_SIGNER_TCP_Client_H
+#ifndef ESP_Signer_TCP_Client_H
+#define ESP_Signer_TCP_Client_H
 
-#ifdef ESP8266
+#if defined(ESP8266)
 
 #include <Arduino.h>
-#include <core_version.h>
-#include <time.h>
+#include <ESP8266WiFi.h>
+#include "ESP_Signer_Net.h"
+#include "ESP_Signer_Error.h"
+#include "./wcs/base/ESP_Signer_TCP_Client_Base.h"
 
-//__GNUC__
-//__GNUC_MINOR__
-//__GNUC_PATCHLEVEL__
-
-#ifdef __GNUC__
-#if __GNUC__ > 4 || __GNUC__ == 10
-#include <string>
-#define ESP8266_CORE_SDK_V3_X_X
-#endif
-#endif
-
-#ifndef ARDUINO_ESP8266_GIT_VER
-#error Your ESP8266 Arduino Core SDK is outdated, please update. From Arduino IDE go to Boards Manager and search 'esp8266' then select the latest version.
-#endif
-
-// 2.6.1 BearSSL bug
-#if ARDUINO_ESP8266_GIT_VER == 0x482516e3
-#error Due to bugs in BearSSL in ESP8266 Arduino Core SDK version 2.6.1, please update ESP8266 Arduino Core SDK to newer version. The issue was found here https:\/\/github.com/esp8266/Arduino/issues/6811.
-#endif
-
-#include <WiFiClientSecure.h>
-#include <CertStoreBearSSL.h>
-#define ESP_SIGNER_ESP_SSL_CLIENT BearSSL::WiFiClientSecure
-
-#define FS_NO_GLOBALS
-#include <FS.h>
-#include "../../FS_Config.h"
-
-#if defined DEFAULT_FLASH_FS
-#define FLASH_FS DEFAULT_FLASH_FS
-#endif
-
-#if defined DEFAULT_SD_FS
-#define SD_FS DEFAULT_SD_FS
-#endif
-
-#if defined(ESP_SIGNER_USE_PSRAM)
-#define FIREBASEJSON_USE_PSRAM
-#endif
-
-#include "../../json/FirebaseJson.h"
-
-#if defined __has_include
-
-#if __has_include(<LwipIntfDev.h>)
-#include <LwipIntfDev.h>
-#endif
-
-#if __has_include(<ENC28J60lwIP.h>)
-#define INC_ENC28J60_LWIP
-#include <ENC28J60lwIP.h>
-#endif
-
-#if __has_include(<W5100lwIP.h>)
-#define INC_W5100_LWIP
-#include <W5100lwIP.h>
-#endif
-
-#if __has_include(<W5500lwIP.h>)
-#define INC_W5500_LWIP
-#include <W5500lwIP.h>
-#endif
-
-#endif
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
-#include "../HTTPCode.h"
-
-struct esp_signer_sd_config_info_t
+class ESP_Signer_TCP_Client : public ESP_Signer_TCP_Client_Base
 {
-  int sck = -1;
-  int miso = -1;
-  int mosi = -1;
-  int ss = -1;
-};
-
-class ESP_SIGNER_WCS : public BearSSL::WiFiClientSecure
-{
-public:
-  ESP_SIGNER_WCS(){};
-  ~ESP_SIGNER_WCS(){};
-};
-
-class ESP_SIGNER_TCP_Client
-{
-
-  friend class GSheetClass;
 
 public:
-  ESP_SIGNER_TCP_Client();
-  ~ESP_SIGNER_TCP_Client();
-
-  /**
-   * Initialization of new http connection.
-   * \param host - Host name without protocols.
-   * \param port - Server's port.
-   * \return True as default.
-   * If no certificate string provided, use (const char*)NULL to CAcert param
-   */
-  bool begin(const char *host, uint16_t port);
-
-  /**
-   *  Check the http connection status.
-   * \return True if connected.
-   */
-  bool connected(void);
-
-  /**
-   * Establish TCP connection when required and send data.
-   * \param data - The data to send.
-   * \param len - The length of data to send.
-   *
-   * \return TCP status code, Return zero if new TCP connection and data sent.
-   */
-  int send(const char *data, size_t len = 0);
-
-  /**
-   * Get the WiFi client pointer.
-   * \return WiFi client pointer.
-   */
-  WiFiClient *stream(void);
+  ESP_Signer_TCP_Client();
+  ~ESP_Signer_TCP_Client();
 
   void setCACert(const char *caCert);
-  void setCACertFile(const char *caCertFile, uint8_t storageType, struct esp_signer_sd_config_info_t sd_config);
-  bool connect(void);
-  void setInsecure();
-  void setBufferSizes(int rx, int tx);
+
+  bool setCertFile(const char *certFile, mb_fs_mem_storage_type storageType);
+
+  void setBufferSizes(int recv, int xmit);
+
+  bool networkReady();
+
+  void networkReconnect();
+
+  void networkDisconnect();
+
+  esp_signer_tcp_client_type type();
+
+  bool isInitialized();
+
+  int hostByName(const char *name, IPAddress &ip);
+
+  void setTimeout(uint32_t timeoutmSec);
+
+  bool begin(const char *host, uint16_t port, int *response_code);
+
+  int beginUpdate(int len, bool verify = true);
+
+  bool ethLinkUp();
+
+  void ethDNSWorkAround();
 
 private:
-  std::unique_ptr<ESP_SIGNER_WCS> _wcs = std::unique_ptr<ESP_SIGNER_WCS>(new ESP_SIGNER_WCS());
-  MB_String _host;
-  uint16_t _port = 0;
-
-  // Actually Arduino base Stream (char read) timeout.
-  // This will override internally by WiFiClientSecureCtx::_connectSSL
-  // to 5000 after SSL handshake was done with success.
-  unsigned long timeout = 10 * 1000;
-
-  MB_String _CAFile;
-  uint8_t _CAFileStoreageType = 0;
-  int _certType = -1;
-  uint8_t _sdPin = 15;
-  bool _clockReady = false;
-  uint16_t _bsslRxSize = 512;
-  uint16_t _bsslTxSize = 512;
-  bool fragmentable = false;
+  std::unique_ptr<ESP_SIGNER_SSL_CLIENT> wcs = std::unique_ptr<ESP_SIGNER_SSL_CLIENT>(new ESP_SIGNER_SSL_CLIENT());
+  uint16_t bsslRxSize = 2048;
+  uint16_t bsslTxSize = 512;
   X509List *x509 = nullptr;
-
   void release();
 };
 
 #endif /* ESP8266 */
 
-#endif /* ESP_SIGNER_TCP_Client_H */
+#endif /* ESP_Signer_TCP_Client_H */

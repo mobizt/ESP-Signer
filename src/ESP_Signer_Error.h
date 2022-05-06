@@ -1,46 +1,25 @@
 /**
- * Created April 23, 2022
- * 
- * This work is a part of ESP Signer library
- * Copyright (c) 2022, K. Suwatchai (Mobizt)
- * 
- * The MIT License (MIT)
- * Copyright (c) 2022, K. Suwatchai (Mobizt)
- * 
- * 
- * Permission is hereby granted, free of charge, to any person returning a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
+ * Created May 6, 2022
+ */
 
-#ifndef ESP_SIGNER_HTTP_CODE_H_
-#define ESP_SIGNER_HTTP_CODE_H_
+#ifndef ESP_Signer_Error_H
+#define ESP_Signer_Error_H
 
-/// HTTP client errors
+#pragma once
+
+
+/// TCP client errors
 #define ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_REFUSED (-1)
-#define ESP_SIGNER_ERROR_TCP_ERROR_SEND_HEADER_FAILED (-2)
-#define ESP_SIGNER_ERROR_TCP_ERROR_SEND_PAYLOAD_FAILED (-3)
-#define ESP_SIGNER_ERROR_TCP_ERROR_NOT_CONNECTED (-4)
-#define ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_LOST (-5)
-#define ESP_SIGNER_ERROR_TCP_ERROR_NO_STREAM (-6)
-#define ESP_SIGNER_ERROR_TCP_ERROR_NO_HTTP_SERVER (-7)
-#define ESP_SIGNER_ERROR_TCP_ERROR_TOO_LESS_RAM (-8)
-#define ESP_SIGNER_ERROR_TCP_ERROR_ENCODING (-9)
-#define ESP_SIGNER_ERROR_TCP_ERROR_STREAM_WRITE (-10)
-#define ESP_SIGNER_ERROR_TCP_RESPONSE_PAYLOAD_READ_TIMED_OUT (-11)
+#define ESP_SIGNER_ERROR_TCP_ERROR_SEND_REQUEST_FAILED (-2)
+#define ESP_SIGNER_ERROR_TCP_ERROR_NOT_CONNECTED (-3)
+#define ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_LOST (-4)
+#define ESP_SIGNER_ERROR_TCP_ERROR_NO_STREAM (-5)
+#define ESP_SIGNER_ERROR_TCP_ERROR_NO_HTTP_SERVER (-6)
+#define ESP_SIGNER_ERROR_TCP_ERROR_TOO_LESS_RAM (-7)
+#define ESP_SIGNER_ERROR_TCP_ERROR_ENCODING (-8)
+#define ESP_SIGNER_ERROR_TCP_ERROR_STREAM_WRITE (-9)
+#define ESP_SIGNER_ERROR_TCP_RESPONSE_PAYLOAD_READ_TIMED_OUT (-10)
+#define ESP_SIGNER_ERROR_TCP_RESPONSE_READ_FAILED (-11)
 #define ESP_SIGNER_ERROR_BUFFER_OVERFLOW (-12)
 #define ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_INUSED -13
 #define ESP_SIGNER_ERROR_CANNOT_CONFIG_TIME -14
@@ -60,7 +39,6 @@
 #define ESP_SIGNER_ERROR_HTTP_CODE_UNDEFINED -1000
 
 /// HTTP codes see RFC7231
-
 #define ESP_SIGNER_ERROR_HTTP_CODE_OK 200
 #define ESP_SIGNER_ERROR_HTTP_CODE_NON_AUTHORITATIVE_INFORMATION 203
 #define ESP_SIGNER_ERROR_HTTP_CODE_NO_CONTENT 204

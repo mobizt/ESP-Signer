@@ -1,7 +1,7 @@
 /**
- * ESP Signer TCP Client v1.0.1
+ * Firebase TCP Client v1.1.20
  *
- * Created April 18, 2022
+ * Created April 17, 2022
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -25,170 +25,221 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef ESP_SIGNER_TCP_Client_CPP
-#define ESP_SIGNER_TCP_Client_CPP
+#ifndef ESP_Signer_TCP_Client_CPP
+#define ESP_Signer_TCP_Client_CPP
 
-#ifdef ESP8266
+#if defined(ESP8266) 
 
 #include "ESP_Signer_TCP_Client.h"
 
-ESP_SIGNER_TCP_Client::ESP_SIGNER_TCP_Client()
+ESP_Signer_TCP_Client::ESP_Signer_TCP_Client()
 {
+  client = wcs.get();
 }
 
-ESP_SIGNER_TCP_Client::~ESP_SIGNER_TCP_Client()
+ESP_Signer_TCP_Client::~ESP_Signer_TCP_Client()
 {
   release();
-  MB_String().swap(_host);
-  MB_String().swap(_CAFile);
 }
 
-bool ESP_SIGNER_TCP_Client::begin(const char *host, uint16_t port)
-{
-
-  _host = host;
-  _port = port;
-  _wcs->setBufferSizes(_bsslRxSize, _bsslTxSize);
-
-  return true;
-}
-
-bool ESP_SIGNER_TCP_Client::connected()
-{
-  if (_wcs)
-    return (_wcs->connected());
-  return false;
-}
-
-int ESP_SIGNER_TCP_Client::send(const char *data, size_t len)
-{
-  if (!connect())
-    return ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_REFUSED;
-
-  if (len == 0)
-    len = strlen(data);
-
-  if (len == 0)
-    return 0;
-
-  if (_wcs->write((const uint8_t *)data, len) != len)
-    return ESP_SIGNER_ERROR_TCP_ERROR_SEND_PAYLOAD_FAILED;
-
-  return 0;
-}
-
-WiFiClient *ESP_SIGNER_TCP_Client::stream(void)
-{
-  if (connected())
-    return _wcs.get();
-  return nullptr;
-}
-
-bool ESP_SIGNER_TCP_Client::connect(void)
-{
-  if (connected())
-  {
-    while (_wcs->available() > 0)
-      _wcs->read();
-    return true;
-  }
-
-  _wcs->setTimeout(timeout);
-
-  if (!_wcs->connect(_host.c_str(), _port))
-    return false;
-
-  return connected();
-}
-
-void ESP_SIGNER_TCP_Client::setInsecure()
-{
-  if (_wcs)
-    _wcs->setInsecure();
-}
-
-void ESP_SIGNER_TCP_Client::setBufferSizes(int rx, int tx)
-{
-  _bsslRxSize = rx;
-  _bsslTxSize = tx;
-  _wcs->setBufferSizes(rx, tx);
-}
-
-void ESP_SIGNER_TCP_Client::release()
-{
-  if (_wcs)
-  {
-    _wcs->stop();
-    _wcs.reset(nullptr);
-    _wcs.release();
-  }
-  if (x509)
-    delete x509;
-}
-
-void ESP_SIGNER_TCP_Client::setCACert(const char *caCert)
+void ESP_Signer_TCP_Client::setCACert(const char *caCert)
 {
 
   release();
 
-  _wcs = std::unique_ptr<ESP_SIGNER_WCS>(new ESP_SIGNER_WCS());
+  wcs = std::unique_ptr<ESP_SIGNER_SSL_CLIENT>(new ESP_SIGNER_SSL_CLIENT());
 
-  _wcs->setBufferSizes(_bsslRxSize, _bsslTxSize);
+  client = wcs.get();
 
   if (caCert)
   {
     x509 = new X509List(caCert);
-    _wcs->setTrustAnchors(x509);
-    _certType = 1;
+    wcs->setTrustAnchors(x509);
+    baseSetCertType(esp_signer_cert_type_data);
   }
   else
   {
-    _wcs->setInsecure();
-    _certType = 0;
+    wcs->setInsecure();
+    baseSetCertType(esp_signer_cert_type_none);
   }
 
-  _wcs->setNoDelay(true);
+  wcs->setBufferSizes(bsslRxSize, bsslTxSize);
 }
 
-void ESP_SIGNER_TCP_Client::setCACertFile(const char *caCertFile, uint8_t storageType, struct esp_signer_sd_config_info_t sd_config)
+bool ESP_Signer_TCP_Client::setCertFile(const char *caCertFile, mb_fs_mem_storage_type storageType)
 {
-  _sdPin = sd_config.ss;
-  _wcs->setBufferSizes(_bsslRxSize, _bsslTxSize);
 
-  if (_clockReady && strlen(caCertFile) > 0)
+  if (!mbfs)
+    return false;
+
+  if (clockReady && strlen(caCertFile) > 0)
   {
-    fs::File f;
-    if (storageType == 1)
+    MB_String filename = caCertFile;
+    if (filename.length() > 0)
     {
-#if defined FLASH_FS
-      FLASH_FS.begin();
-      if (FLASH_FS.exists(caCertFile))
-        f = FLASH_FS.open(caCertFile, "r");
-#endif
+      if (filename[0] != '/')
+        filename.prepend('/');
     }
-    else if (storageType == 2)
+
+    int len = mbfs->open(filename, storageType, mb_fs_open_mode_read);
+    if (len > -1)
     {
-#if defined SD_FS
-      SD_FS.begin(_sdPin);
-      if (SD_FS.exists(caCertFile))
-        f = SD_FS.open(caCertFile, FILE_READ);
-#endif
+
+      uint8_t *der = (uint8_t *)mbfs->newP(len);
+      if (mbfs->available(storageType))
+        mbfs->read(storageType, der, len);
+      mbfs->close(storageType);
+      wcs->setTrustAnchors(new X509List(der, len));
+      mbfs->delP(&der);
+      baseSetCertType(esp_signer_cert_type_file);
     }
-    if (f)
-    {
-      size_t len = f.size();
-      uint8_t *der = new uint8_t[len];
-      if (f.available())
-        f.read(der, len);
-      f.close();
-      _wcs->setTrustAnchors(new X509List(der, len));
-      delete[] der;
-    }
-    _certType = 2;
   }
-  _wcs->setNoDelay(true);
+
+  wcs->setBufferSizes(bsslRxSize, bsslTxSize);
+
+  return getCertType() == esp_signer_cert_type_file;
+}
+
+void ESP_Signer_TCP_Client::setBufferSizes(int recv, int xmit)
+{
+  bsslRxSize = recv;
+  bsslTxSize = xmit;
+}
+
+bool ESP_Signer_TCP_Client::networkReady()
+{
+  return WiFi.status() == WL_CONNECTED || ethLinkUp();
+}
+
+void ESP_Signer_TCP_Client::networkReconnect()
+{
+  WiFi.reconnect();
+}
+
+void ESP_Signer_TCP_Client::networkDisconnect()
+{
+  WiFi.disconnect();
+}
+
+esp_signer_tcp_client_type ESP_Signer_TCP_Client::type()
+{
+  return esp_signer_tcp_client_type_internal;
+}
+
+bool ESP_Signer_TCP_Client::isInitialized() { return true; }
+
+int ESP_Signer_TCP_Client::hostByName(const char *name, IPAddress &ip)
+{
+  return WiFi.hostByName(name, ip);
+}
+
+void ESP_Signer_TCP_Client::setTimeout(uint32_t timeoutmSec)
+{
+  if (wcs)
+    wcs->setTimeout(timeoutmSec);
+
+  baseSetTimeout(timeoutmSec);
+}
+
+bool ESP_Signer_TCP_Client::begin(const char *host, uint16_t port, int *response_code)
+{
+
+  this->host = host;
+  this->port = port;
+  this->response_code = response_code;
+
+  ethDNSWorkAround();
+
+  wcs->setBufferSizes(bsslRxSize, bsslTxSize);
+
+  return true;
+}
+
+bool ESP_Signer_TCP_Client::ethLinkUp()
+{
+
+  if (!eth)
+    return false;
+
+  bool ret = false;
+#if defined(ESP8266) && defined(ESP8266_CORE_SDK_V3_X_X)
+
+#if defined(INC_ENC28J60_LWIP)
+  if (eth->enc28j60)
+  {
+    ret = eth->enc28j60->status() == WL_CONNECTED;
+    goto ex;
+  }
+#endif
+#if defined(INC_W5100_LWIP)
+  if (eth->w5100)
+  {
+    ret = eth->w5100->status() == WL_CONNECTED;
+    goto ex;
+  }
+#endif
+#if defined(INC_W5100_LWIP)
+  if (eth->w5500)
+  {
+    ret = eth->w5500->status() == WL_CONNECTED;
+    goto ex;
+  }
+#endif
+
+  return ret;
+
+ex:
+  // workaround for ESP8266 Ethernet
+  delayMicroseconds(0);
+#endif
+
+  return ret;
+}
+
+void ESP_Signer_TCP_Client::ethDNSWorkAround()
+{
+  if (!eth)
+    return;
+
+#if defined(ESP8266_CORE_SDK_V3_X_X)
+
+#if defined(INC_ENC28J60_LWIP)
+  if (eth->enc28j60)
+    goto ex;
+#endif
+#if defined(INC_W5100_LWIP)
+  if (eth->w5100)
+    goto ex;
+#endif
+#if defined(INC_W5100_LWIP)
+  if (eth->w5500)
+    goto ex;
+#endif
+
+  return;
+
+ex:
+  WiFiClient _client;
+  _client.connect(host.c_str(), port);
+  _client.stop();
+#endif
+}
+
+void ESP_Signer_TCP_Client::release()
+{
+  if (wcs)
+  {
+    wcs->stop();
+    wcs.reset(nullptr);
+    wcs.release();
+
+    if (x509)
+      delete x509;
+
+    baseSetCertType(esp_signer_cert_type_undefined);
+  }
 }
 
 #endif /* ESP8266 */
 
-#endif /* ESP_SIGNER_TCP_Client_CPP */
+#endif /* ESP_Signer_TCP_Client_CPP */

@@ -1,16 +1,16 @@
 /**
- * ESP Signer TCP Client v1.0.1
- * 
- * Created April 18, 2022
- * 
+ * Firebase TCP Client v1.1.19
+ *
+ * Created February 20, 2022
+ *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
- * 
- * 
+ *
+ *
  * Copyright (c) 2015 Markus Sattler. All rights reserved.
  * This file is part of the HTTPClient for Arduino.
- * Port to ESP32 by Evandro Luis Copercini (2017), 
- * changed fingerprints to CA verification. 	
+ * Port to ESP32 by Evandro Luis Copercini (2017),
+ * changed fingerprints to CA verification.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -26,68 +26,35 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
-*/
+ */
 
-#ifndef ESP_SIGNER_TCP_Client_H
-#define ESP_SIGNER_TCP_Client_H
+#ifndef ESP_Signer_TCP_Client_H
+#define ESP_Signer_TCP_Client_H
 
-#ifdef ESP32
+#if defined(ESP32) 
 
-#include <Arduino.h>
-#include <WiFiClient.h>
-#include <FS.h>
-#include <SPIFFS.h>
-#include <SD.h>
-#include <ETH.h>
-#include "../../FS_Config.h"
-#include <WiFiClientSecure.h>
+#include "ESP_Signer_Net.h"
+#include "ESP_Signer_Error.h"
+#include "mbfs/MB_FS.h"
+#include "./wcs/base/ESP_Signer_TCP_Client_Base.h"
 
-#if defined(ESP_SIGNER_USE_PSRAM)
-#define FIREBASEJSON_USE_PSRAM
-#endif
-#include "../../json/FirebaseJson.h"
-
-#if __has_include(<esp_idf_version.h>)
-#include <esp_idf_version.h>
-#endif
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#if defined DEFAULT_FLASH_FS
-#define FLASH_FS DEFAULT_FLASH_FS
-#endif
-#if defined DEFAULT_SD_FS
-#define SD_FS DEFAULT_SD_FS
-#endif
-#define FORMAT_FLASH FORMAT_FLASH_IF_MOUNT_FAILED
-
-#include "../HTTPCode.h"
-
-static const char esp_idf_branch_str[] PROGMEM = "release/v";
-
-struct esp_signer_sd_config_info_t
+extern "C"
 {
-  int sck = -1;
-  int miso = -1;
-  int mosi = -1;
-  int ss = -1;
-  const char *sd_mmc_mountpoint = "";
-  bool sd_mmc_mode1bit = false;
-  bool sd_mmc_format_if_mount_failed = false;
-};
+#include <esp_err.h>
+#include <esp_wifi.h>
+}
 
-//The derived class to fix the memory leaks issue
-//https://github.com/espressif/arduino-esp32/issues/5480
-class ESP_SIGNER_WCS : public WiFiClientSecure
+// The derived class to fix the memory leaks issue
+// https://github.com/espressif/arduino-esp32/issues/5480
+class ESP_Signer_WCS : public WiFiClientSecure
 {
 public:
-  ESP_SIGNER_WCS(){};
-  ~ESP_SIGNER_WCS(){};
+  ESP_Signer_WCS(){};
+  ~ESP_Signer_WCS(){};
 
   int _connect(const char *host, uint16_t port, unsigned long timeout)
   {
     _timeout = timeout;
-
     if (connect(host, port) == 0)
     {
       if (_CA_cert != NULL)
@@ -99,71 +66,46 @@ public:
   }
 };
 
-class ESP_SIGNER_TCP_Client
+class ESP_Signer_TCP_Client : public ESP_Signer_TCP_Client_Base
 {
 
-  friend class GSheetClass;
-
 public:
-  ESP_SIGNER_TCP_Client();
-  ~ESP_SIGNER_TCP_Client();
+  ESP_Signer_TCP_Client();
+  ~ESP_Signer_TCP_Client();
 
-  /**
-   * Initialization of new http connection.
-   * \param host - Host name without protocols.
-   * \param port - Server's port.
-   * \return True as default.
-   * If no certificate string provided, use (const char*)NULL to CAcert param 
-  */
-  bool begin(const char *host, uint16_t port);
+  void setCACert(const char *caCert);
 
-  /**
-   *  Check the http connection status.
-   * \return True if connected.
-  */
-  bool connected();
+  bool setCertFile(const char *certFile, mb_fs_mem_storage_type storageType);
 
-  /**
-    * Establish TCP connection when required and send data.
-    * \param data - The data to send.
-    * \param len - The length of data to send.
-    * 
-    * \return TCP status code, Return zero if new TCP connection and data sent.
-    */
-  int send(const char *data, size_t len = 0);
-
-  /**
-   * Get the WiFi client pointer.
-   * \return WiFi client pointer.
-  */
-  WiFiClient *stream(void);
-
-  /**
-   * Set insecure mode
-  */
   void setInsecure();
 
-  void stop();
+  bool networkReady();
 
-  bool connect(void);
-  void setCACert(const char *caCert);
-  void setCACertFile(const char *caCertFile, uint8_t storageType, struct esp_signer_sd_config_info_t sd_config);
+  void networkReconnect();
+
+  void networkDisconnect();
+
+  ESP_Signer_tcp_client_type type();
+
+  bool isInitialized();
+
+  int hostByName(const char *name, IPAddress &ip);
+
+  void setTimeout(uint32_t timeoutmSec);
+
+  bool begin(const char *host, uint16_t port, int *response_code);
+
+  bool connect();
 
 private:
-  std::unique_ptr<ESP_SIGNER_WCS> _wcs = std::unique_ptr<ESP_SIGNER_WCS>(new ESP_SIGNER_WCS());
-  MB_String _host;
-  uint16_t _port = 0;
+  std::unique_ptr<ESP_Signer_WCS> wcs = std::unique_ptr<ESP_Signer_WCS>(new ESP_Signer_WCS());
+  char *cert = NULL;
 
-  //lwIP socket connection and ssl handshake timeout
-  unsigned long timeout = 10 * 1000;
+  bool ethLinkUp();
 
-  MB_String _CAFile;
-  uint8_t _CAFileStoreageType = 0;
-  int _certType = -1;
-  bool _clockReady = false;
   void release();
 };
 
 #endif /* ESP32 */
 
-#endif /* ESP_SIGNER_TCP_Client_H */
+#endif /* ESP_Signer_TCP_Client_H */

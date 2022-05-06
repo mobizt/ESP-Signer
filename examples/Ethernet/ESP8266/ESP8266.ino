@@ -75,6 +75,8 @@ void begin()
 
     config.signer.tokens.scope = "https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/drive.file";
 
+    config.spi_ethernet_module.enc28j60 = &eth;
+    
     Signer.begin(&config);
 }
 

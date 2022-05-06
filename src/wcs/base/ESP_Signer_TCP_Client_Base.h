@@ -1,7 +1,7 @@
 /*
- * TCP Client Base class, version 1.0.2
+ * ESP Signer TCP Client base v1.0.0
  *
- * Created February 28, 2022
+ * Created May 6, 2022
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)

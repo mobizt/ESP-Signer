@@ -1,7 +1,7 @@
 /**
- * Firebase TCP Client v1.1.19
+ * ESP Signer TCP Client v1.0.0
  *
- * Created February 20, 2022
+ * Created May 6, 2022
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -63,7 +63,7 @@ void ESP_Signer_TCP_Client::setCACert(const char *caCert)
 
   if (caCert != NULL)
   {
-    baseSetCertType(ESP_Signer_cert_type_data);
+    baseSetCertType(esp_signer_cert_type_data);
     wcs->setCACert(caCert);
   }
   else
@@ -71,7 +71,7 @@ void ESP_Signer_TCP_Client::setCACert(const char *caCert)
     wcs->stop();
     wcs->setCACert(NULL);
     setInsecure();
-    baseSetCertType(ESP_Signer_cert_type_none);
+    baseSetCertType(esp_signer_cert_type_none);
   }
 }
 
@@ -98,7 +98,7 @@ bool ESP_Signer_TCP_Client::setCertFile(const char *caCertFile, mb_fs_mem_storag
         fs::File file = mbfs->getFlashFile();
         wcs->loadCACert(file, len);
         mbfs->close(storageType);
-        baseSetCertType(ESP_Signer_cert_type_file);
+        baseSetCertType(esp_signer_cert_type_file);
       }
       else if (storageType == mb_fs_mem_storage_type_sd)
       {
@@ -114,20 +114,20 @@ bool ESP_Signer_TCP_Client::setCertFile(const char *caCertFile, mb_fs_mem_storag
 
         mbfs->close(storageType);
         wcs->setCACert((const char *)cert);
-        baseSetCertType(ESP_Signer_cert_type_file);
+        baseSetCertType(esp_signer_cert_type_file);
 
 #elif defined(MBFS_SD_FS)
         fs::File file = mbfs->getSDFile();
         wcs->loadCACert(file, len);
         mbfs->close(storageType);
-        baseSetCertType(ESP_Signer_cert_type_file);
+        baseSetCertType(esp_signer_cert_type_file);
 
 #endif
       }
     }
   }
 
-  return getCertType() == ESP_Signer_cert_type_file;
+  return getCertType() == esp_signer_cert_type_file;
 }
 
 bool ESP_Signer_TCP_Client::networkReady()
@@ -145,9 +145,9 @@ void ESP_Signer_TCP_Client::networkDisconnect()
   WiFi.disconnect();
 }
 
-ESP_Signer_tcp_client_type ESP_Signer_TCP_Client::type()
+esp_signer_tcp_client_type ESP_Signer_TCP_Client::type()
 {
-  return ESP_Signer_tcp_client_type_internal;
+  return esp_signer_tcp_client_type_internal;
 }
 
 bool ESP_Signer_TCP_Client::isInitialized() { return true; }
@@ -185,7 +185,7 @@ bool ESP_Signer_TCP_Client::connect()
   wcs->setTimeout(timeoutMs);
 
   if (!wcs->_connect(host.c_str(), port, timeoutMs))
-    return setError(ESP_Signer_ERROR_TCP_ERROR_CONNECTION_REFUSED);
+    return setError(ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_REFUSED);
 
   return connected();
 }
@@ -211,7 +211,7 @@ void ESP_Signer_TCP_Client::release()
     if (cert)
       mbfs->delP(&cert);
 
-    baseSetCertType(ESP_Signer_cert_type_undefined);
+    baseSetCertType(esp_signer_cert_type_undefined);
   }
 }
 

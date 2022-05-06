@@ -1,7 +1,7 @@
 /**
- * Firebase TCP Client v1.1.19
+ * ESP Signer TCP Client v1.0.0
  *
- * Created February 20, 2022
+ * Created May 6, 2022
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -85,7 +85,7 @@ public:
 
   void networkDisconnect();
 
-  ESP_Signer_tcp_client_type type();
+  esp_signer_tcp_client_type type();
 
   bool isInitialized();
 

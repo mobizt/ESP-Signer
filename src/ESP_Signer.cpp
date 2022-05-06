@@ -1384,6 +1384,47 @@ bool ESP_Signer::setSystemTime(time_t ts)
     return ut->setTimestamp(ts) == 0;
 }
 
+#if defined(MBFS_SD_FS) && defined(MBFS_CARD_TYPE_SD)
+
+bool ESP_Signer::sdBegin(int8_t ss, int8_t sck, int8_t miso, int8_t mosi)
+{
+    return mbfs->sdBegin(ss, sck, miso, mosi);
+}
+
+#if defined(ESP8266)
+bool ESP_Signer::sdBegin(SDFSConfig *sdFSConfig)
+{
+    return mbfs->sdFatBegin(sdFSConfig);
+}
+#endif
+
+#if defined(ESP32)
+
+bool ESP_Signer::sdBegin(int8_t ss, SPIClass *spiConfig)
+{
+    return mbfs->sdSPIBegin(ss, spiConfig);
+}
+#endif
+
+#if defined(MBFS_ESP32_SDFAT_ENABLED) || defined(MBFS_SDFAT_ENABLED)
+bool ESP_Signer::sdBegin(SdSpiConfig *sdFatSPIConfig, int8_t ss, int8_t sck, int8_t miso, int8_t mosi)
+{
+    return mbfs->sdFatBegin(sdFatSPIConfig, ss, sck, miso, mosi);
+}
+#endif
+
+#endif
+
+#if defined(ESP8266) && defined(MBFS_SD_FS) && defined(MBFS_CARD_TYPE_SD_MMC)
+
+bool ESP_Signer::sdMMCBegin(const char *mountpoint, bool mode1bit, bool format_if_mount_failed)
+{
+
+    return mbfs->sdMMCBegin(mountpoint, mode1bit, format_if_mount_failed);
+}
+
+#endif
+
 ESP_Signer Signer = ESP_Signer();
 
 #endif

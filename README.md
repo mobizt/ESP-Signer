@@ -402,6 +402,7 @@ bool setSystemTime(time_t ts);
 
 
 
+
 #### SD card config with GPIO pins.
 
 param **`ss`** SPI Chip/Slave Select pin.
@@ -416,6 +417,51 @@ return **`Boolean`** type status indicates the success of the operation.
 
 ```cpp
 bool sdBegin( int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
+```
+
+
+
+#### SD card config with SD FS configurations (ESP8266 only).
+
+param **`sdFSConfig`** The pointer to SDFSConfig object (ESP8266 only).
+
+return **`Boolean`** type status indicates the success of the operation.
+
+```cpp
+bool sdBegin(SDFSConfig *sdFSConfig);
+```
+
+
+
+#### SD card config with chip select and SPI configuration (ESP32 only).
+
+param **`ss`** SPI Chip/Slave Select pin.
+
+param **`spiConfig`** The pointer to SPIClass object for SPI configuartion (ESP32 only).
+
+return **`Boolean`** type status indicates the success of the operation.
+
+```cpp
+bool sdBegin(int8_t ss, SPIClass *spiConfig = nullptr);
+```
+
+
+#### SD card config with SdFat SPI and pins configurations (ESP32 with SdFat included only).
+
+param **`sdFatSPIConfig`** The pointer to SdSpiConfig object for SdFat SPI configuration.
+
+param **`ss`** SPI Chip/Slave Select pin.
+
+param **`sck`** SPI Clock pin.
+
+param **`miso`** SPI MISO pin.
+
+param **`mosi`** SPI MOSI pin.
+
+return **`Boolean`** type status indicates the success of the operation.
+
+```cpp
+bool sdBegin(SdSpiConfig *sdFatSPIConfig, int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
 ```
 
 

@@ -125,6 +125,66 @@ public:
      */
     bool setSystemTime(time_t ts);
 
+#if defined(MBFS_SD_FS) && defined(MBFS_CARD_TYPE_SD)
+
+    /** SD card config with GPIO pins.
+     *
+     * @param ss SPI Chip/Slave Select pin.
+     * @param sck SPI Clock pin.
+     * @param miso SPI MISO pin.
+     * @param mosi SPI MOSI pin.
+     * @return Boolean type status indicates the success of the operation.
+     */
+    bool sdBegin(int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
+
+#if defined(ESP8266)
+
+    /** SD card config with SD FS configurations (ESP8266 only).
+     *
+     * @param ss SPI Chip/Slave Select pin.
+     * @param sdFSConfig The pointer to SDFSConfig object (ESP8266 only).
+     * @return Boolean type status indicates the success of the operation.
+     */
+    bool sdBegin(SDFSConfig *sdFSConfig);
+
+#endif
+
+#if defined(ESP32)
+    /** SD card config with chip select and SPI configuration (ESP32 only).
+     *
+     * @param ss SPI Chip/Slave Select pin.
+     * @param spiConfig The pointer to SPIClass object for SPI configuartion (ESP32 only).
+     * @return Boolean type status indicates the success of the operation.
+     */
+    bool sdBegin(int8_t ss, SPIClass *spiConfig = nullptr);
+#endif
+
+#if defined(MBFS_ESP32_SDFAT_ENABLED) || defined(MBFS_SDFAT_ENABLED)
+    /** SD card config with SdFat SPI and pins configurations (ESP32 with SdFat included only).
+     *
+     * @param sdFatSPIConfig The pointer to SdSpiConfig object for SdFat SPI configuration.
+     * @param ss SPI Chip/Slave Select pin.
+     * @param sck SPI Clock pin.
+     * @param miso SPI MISO pin.
+     * @param mosi SPI MOSI pin.
+     * @return Boolean type status indicates the success of the operation.
+     */
+    bool sdBegin(SdSpiConfig *sdFatSPIConfig, int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
+#endif
+
+#endif
+
+#if defined(ESP32) && defined(MBFS_SD_FS) && defined(MBFS_CARD_TYPE_SD_MMC)
+    /** Initialize the SD_MMC card (ESP32 only).
+     *
+     * @param mountpoint The mounting point.
+     * @param mode1bit Allow 1 bit data line (SPI mode).
+     * @param format_if_mount_failed Format SD_MMC card if mount failed.
+     * @return The boolean value indicates the success of operation.
+     */
+    bool sdMMCBegin(const char *mountpoint = "/sdcard", bool mode1bit = false, bool format_if_mount_failed = false);
+#endif
+
 protected:
     SignerUtils *ut = nullptr;
     MB_FS *mbfs = nullptr;

@@ -1,7 +1,7 @@
 /*
- * ESP Signer TCP Client base v1.0.0
+ * ESP Signer TCP Client base v1.0.1
  *
- * Created May 6, 2022
+ * Created November 17, 2022
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -108,8 +108,6 @@ public:
             flush();
             return true;
         }
-
-        client->setTimeout(timeoutMs);
 
         if (!client->connect(host.c_str(), port))
             return setError(ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_REFUSED);

@@ -1,7 +1,7 @@
 /**
- * ESP Signer TCP Client v1.0.0
+ * ESP Signer TCP Client v1.0.1
  *
- * Created May 6, 2022
+ * Created November 17, 2022
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -159,8 +159,6 @@ int ESP_Signer_TCP_Client::hostByName(const char *name, IPAddress &ip)
 
 void ESP_Signer_TCP_Client::setTimeout(uint32_t timeoutmSec)
 {
-  if (wcs)
-    wcs->setTimeout(timeoutmSec / 1000);
 
   baseSetTimeout(timeoutmSec);
 }
@@ -182,10 +180,10 @@ bool ESP_Signer_TCP_Client::connect()
     return true;
   }
 
-  wcs->setTimeout(timeoutMs);
-
   if (!wcs->_connect(host.c_str(), port, timeoutMs))
     return setError(ESP_SIGNER_ERROR_TCP_ERROR_CONNECTION_REFUSED);
+
+  wcs->setTimeout(timeoutMs);
 
   return connected();
 }

@@ -49,7 +49,7 @@
 
 #include <Arduino.h>
 
-#include <ESPSigner.h>
+#include <ESP_Signer.h>
 
 /** These credentials are taken from Service Account key file (JSON)
  * https://cloud.google.com/iam/docs/service-accounts

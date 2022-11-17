@@ -1,7 +1,7 @@
 /**
- * ESP Signer TCP Client v1.0.0
+ * ESP Signer TCP Client v1.0.1
  *
- * Created May 6, 2022
+ * Created November 17, 2022
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)

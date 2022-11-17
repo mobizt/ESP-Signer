@@ -6,7 +6,7 @@
 #include <ESP8266WiFi.h>
 #endif
 
-#include <ESPSigner.h>
+#include <ESP_Signer.h>
 
 #define WIFI_SSID "WiFi SSID"
 #define WIFI_PASSWORD "WIFi PSK"

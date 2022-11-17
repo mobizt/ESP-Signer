@@ -6,7 +6,7 @@
 #include <ESP8266WiFi.h>
 #endif
 
-#include <ESPSigner.h>
+#include <ESP_Signer.h>
 
 // For SD card configuration and mounting
 #include <ESP_Signer_SD_helper.h> // See src/ESP_Signer_SD_helper.h

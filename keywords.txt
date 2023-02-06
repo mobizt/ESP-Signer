@@ -25,6 +25,8 @@ refreshToken    KEYWORD2
 setSystemTime   KEYWORD2
 sdBegin KEYWORD2
 sdMMCBegin  KEYWORD2
+setExternalClient   KEYWORD2
+setUDPClient    KEYWORD2
 
 
 ######################################

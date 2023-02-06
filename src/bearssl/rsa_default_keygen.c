@@ -22,9 +22,9 @@
  * SOFTWARE.
  */
 
-#ifdef ESP8266
-
 #include "inner.h"
+#include <Arduino.h>
+#if defined(ESP8266) || defined(PICO_RP2040)
 
 /* see bearssl_rsa.h */
 br_rsa_keygen

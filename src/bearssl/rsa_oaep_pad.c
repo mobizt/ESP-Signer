@@ -22,9 +22,9 @@
  * SOFTWARE.
  */
 
-#ifdef ESP8266
-
 #include "inner.h"
+#include <Arduino.h>
+#if defined(ESP8266) || defined(PICO_RP2040)
 
 /*
  * Hash some data. This is put as a separate function so that stack

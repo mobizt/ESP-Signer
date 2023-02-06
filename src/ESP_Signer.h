@@ -1,16 +1,16 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.h version 1.2.1
+ * Google's OAuth2.0 Access token Generation class, Signer.h version 1.3.0
  *
  * This library used RS256 for signing algorithm.
  *
  * The signed JWT token will be generated and exchanged with the access token in the final generating process.
  *
- * This library supports Espressif ESP8266 and ESP32
+ * This library supports ESP8266, ESP32 and Raspberry Pi Pico.
  *
- * Created November 17, 2022
+ * Created February 6, 2023
  *
  * The MIT License (MIT)
- * Copyright (c) 2022 K. Suwatchai (Mobizt)
+ * Copyright (c) 2023 K. Suwatchai (Mobizt)
  *
  *
  * Permission is hereby granted, free of charge, to any person returning a copy of
@@ -35,7 +35,8 @@
 #define ESP_SIGNER_H
 
 #include <Arduino.h>
-#include "ESP_Signer_Utils.h"
+#include "ESP_Signer_Helper.h"
+#include "auth/GAuth_OAuth2_Client.h"
 
 class ESP_Signer
 {
@@ -43,6 +44,40 @@ class ESP_Signer
 public:
     ESP_Signer();
     ~ESP_Signer();
+
+    /** Assign external Arduino Client and required callback fumctions.
+     *
+     * @param client The pointer to Arduino Client derived class of SSL Client.
+     * @param networkConnectionCB The function that handles the network connection.
+     * @param networkStatusCB The function that handle the network connection status acknowledgement.
+     */
+    void setExternalClient(Client *client, ESP_Signer_NetworkConnectionRequestCallback networkConnectionCB,
+                           ESP_Signer_NetworkStatusRequestCallback networkStatusCB)
+    {
+#if defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT)
+        mSetClient(client, networkConnectionCB, networkStatusCB);
+#endif
+    }
+
+    /** Assign UDP client and gmt offset for NTP time synching when using external SSL client
+     * @param client The pointer to UDP client based on the network type.
+     * @param gmtOffset The GMT time offset.
+     */
+    void setUDPClient(UDP *client, float gmtOffset = 0)
+    {
+#if defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT)
+        mSetUDPClient(client, gmtOffset);
+#endif
+    }
+
+    /** Set the network status acknowledgement.
+     *
+     * @param status The network status.
+     */
+    void setNetworkStatus(bool status)
+    {
+        authClient.tcpClient->setNetworkStatus(status);
+    }
 
     /**
      * Begin the Access token generation
@@ -127,40 +162,51 @@ public:
 
 #if defined(MBFS_SD_FS) && defined(MBFS_CARD_TYPE_SD)
 
-    /** SD card config with GPIO pins.
+    /** Initiate SD card with SPI port configuration.
      *
      * @param ss SPI Chip/Slave Select pin.
      * @param sck SPI Clock pin.
      * @param miso SPI MISO pin.
      * @param mosi SPI MOSI pin.
+     * @param frequency The SPI frequency
      * @return Boolean type status indicates the success of the operation.
      */
-    bool sdBegin(int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
+    bool sdBegin(int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1, uint32_t frequency = 4000000)
+    {
+        return mbfs.sdBegin(ss, sck, miso, mosi, frequency);
+    }
 
 #if defined(ESP8266)
 
-    /** SD card config with SD FS configurations (ESP8266 only).
+    /** Initiate SD card with SD FS configurations (ESP8266 only).
      *
      * @param ss SPI Chip/Slave Select pin.
      * @param sdFSConfig The pointer to SDFSConfig object (ESP8266 only).
      * @return Boolean type status indicates the success of the operation.
      */
-    bool sdBegin(SDFSConfig *sdFSConfig);
+    bool sdBegin(SDFSConfig *sdFSConfig)
+    {
+        return mbfs.sdFatBegin(sdFSConfig);
+    }
 
 #endif
 
 #if defined(ESP32)
-    /** SD card config with chip select and SPI configuration (ESP32 only).
+    /** Initiate SD card with chip select and SPI configuration (ESP32 only).
      *
      * @param ss SPI Chip/Slave Select pin.
-     * @param spiConfig The pointer to SPIClass object for SPI configuartion (ESP32 only).
+     * @param spiConfig The pointer to SPIClass object for SPI configuartion.
+     * @param frequency The SPI frequency.
      * @return Boolean type status indicates the success of the operation.
      */
-    bool sdBegin(int8_t ss, SPIClass *spiConfig = nullptr);
+    bool sdBegin(int8_t ss, SPIClass *spiConfig = nullptr, uint32_t frequency = 4000000)
+    {
+        return mbfs.sdSPIBegin(ss, spiConfig, frequency);
+    }
 #endif
 
 #if defined(MBFS_ESP32_SDFAT_ENABLED) || defined(MBFS_SDFAT_ENABLED)
-    /** SD card config with SdFat SPI and pins configurations (ESP32 with SdFat included only).
+    /** Initiate SD card with SdFat SPI and pins configurations (with SdFat included only).
      *
      * @param sdFatSPIConfig The pointer to SdSpiConfig object for SdFat SPI configuration.
      * @param ss SPI Chip/Slave Select pin.
@@ -169,7 +215,21 @@ public:
      * @param mosi SPI MOSI pin.
      * @return Boolean type status indicates the success of the operation.
      */
-    bool sdBegin(SdSpiConfig *sdFatSPIConfig, int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
+    bool sdBegin(SdSpiConfig *sdFatSPIConfig, int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1)
+    {
+        return mbfs.sdFatBegin(sdFatSPIConfig, ss, sck, miso, mosi);
+    }
+
+    /** Initiate SD card with SdFat SDIO configuration (with SdFat included only).
+     *
+     * @param sdFatSDIOConfig The pointer to SdioConfig object for SdFat SDIO configuration.
+     * @return Boolean type status indicates the success of the operation.
+     */
+    bool sdBegin(SdioConfig *sdFatSDIOConfig)
+    {
+        return mbfs.sdFatBegin(sdFatSDIOConfig);
+    }
+
 #endif
 
 #endif
@@ -182,51 +242,36 @@ public:
      * @param format_if_mount_failed Format SD_MMC card if mount failed.
      * @return The boolean value indicates the success of operation.
      */
-    bool sdMMCBegin(const char *mountpoint = "/sdcard", bool mode1bit = false, bool format_if_mount_failed = false);
+    bool sdMMCBegin(const char *mountpoint = "/sdcard", bool mode1bit = false, bool format_if_mount_failed = false)
+    {
+        return mbfs.sdMMCBegin(mountpoint, mode1bit, format_if_mount_failed);
+    }
 #endif
 
 protected:
-    SignerUtils *ut = nullptr;
-    MB_FS *mbfs = nullptr;
     SignerConfig *config = nullptr;
-    esp_signer_callback_function_t _cb = nullptr;
-    struct token_info_t tokenInfo;
 
-    bool authenticated = false;
-    bool _token_processing_task_enable = false;
-    bool _token_processing_task_end_request = false;
+    GAuth_OAuth2_Client authClient;
+    MB_FS mbfs;
+    uint32_t mb_ts = 0;
+    uint32_t mb_ts_offset = 0;
+    int response_code = 0;
 
-    unsigned long unauthen_millis = 0;
-    unsigned long unauthen_pause_duration = 3000;
+    int cert_addr = 0;
+    bool cert_updated = false;
 
-    bool tokenSAReady();
-    bool parseSAFile();
-    bool handleToken();
-    void clearSA();
-    void setTokenError(int code);
-    bool handleSignerError(int code, int httpCode = 0);
-    bool parseJsonResponse(PGM_P key_path);
-    bool handleTokenResponse(int &httpCode);
-    void tokenProcessingTask();
-    bool createJWT();
-    bool requestTokens();
-    void getExpiration(const char *exp);
-    void checkToken();
-    void errorToString(int httpCode, MB_String &buff);
-    void sendTokenStatusCB();
-    unsigned long getExpireMS();
-    bool isExpired();
-    SignerConfig *getCfg();
-    bool reconnect(unsigned long dataTime);
-
-#if defined(ESP8266)
-    void set_scheduled_callback(esp_signer_callback_function_t callback)
-    {
-        _cb = std::move([callback]()
-                        { schedule_function(callback); });
-        _cb();
-    }
+    void setTokenCallback(TokenStatusCallback callback);
+    void setPrerefreshSeconds(uint16_t seconds);
+    bool isError(MB_String &response);
+    bool setClock(float gmtOffset);
+#if defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT)
+    void mSetClient(Client *client, ESP_Signer_NetworkConnectionRequestCallback networkConnectionCB,
+                   ESP_Signer_NetworkStatusRequestCallback networkStatusCB);
+    void mSetUDPClient(UDP *client, float gmtOffset = 0);
 #endif
+    bool setSecure();
+    void reset();
+    bool waitClockReady();
 };
 
 extern ESP_Signer Signer;

@@ -7,9 +7,11 @@ The Service Account credentials i.e. project_id, client_email and private_key wh
 
 See [How to Create Service Account Private Key](#how-to-create-service-account-private-key) below.
 
-This library supports ESP8266 and ESP32 MCU from Espressif. 
+This library supports ESP8266, ESP32 and Raspberry Pi Pico (RP2040). 
 
-Supports ethernet in ESP32 using LAN8720, TLK110 and IP101 Ethernet modules and ESP8266 using ENC28J60, W5100 and W5500 Ethernet modules.
+This library supports native ethernet for ESP8266 and ESP32 and SPI Ethernet for Raspberry Pi Pico.
+
+And other network interface clients e.g., WiFiClient, EthernetClient and GSMClient are also supported.
 
 
 ## Tested Devices
@@ -22,17 +24,39 @@ Supports ethernet in ESP32 using LAN8720, TLK110 and IP101 Ethernet modules and 
  * NodeMCU-32
  * WEMOS LOLIN32
  * TTGO T8 V1.8
+ * Raspberry Pi Pico W
+
 
 
 
 ## Dependencies
 
 
-This library required **ESP8266 or ESP32 Core SDK**.
+This library required **ESP8266, ESP32 and Raspberry Pi Pico Arduino Core SDK** to be installed.
 
-For Arduino IDE, ESP8266 Core SDK can be installed through **Boards Manager**. 
+To install device SDK, in Arduino IDE, ESP8266, ESP32 and Pico Core SDK can be installed through **Boards Manager**. 
 
-For PlatfoemIO IDE, ESP8266 Core SDK can be installed through **PIO Home** > **Platforms** > **Espressif 8266 or Espressif 32**.
+In PlatfoemIO IDE, ESP32 and ESP8266 devices's Core SDK can be installed through **PIO Home** > **Platforms** > **Espressif 8266 or Espressif 32**.
+
+
+### RP2040 Arduino SDK installation
+
+For Arduino IDE, the Arduino-Pico SDK can be installed from Boards Manager by searching pico and choose Raspberry Pi Pico/RP2040 to install.
+
+For PlatformIO, the Arduino-Pico SDK can be installed via platformio.ini
+
+```ini
+[env:rpipicow]
+platform = https://github.com/maxgerhardt/platform-raspberrypi.git
+board = rpipicow
+framework = arduino
+board_build.core = earlephilhower
+monitor_speed = 115200
+board_build.filesystem_size = 1m
+```
+
+See this Arduino-Pico SDK [documentation](https://arduino-pico.readthedocs.io/en/latest/) for more information.
+
 
 
 
@@ -60,7 +84,7 @@ Go to [Google Cloud Console](https://console.cloud.google.com/projectselector2/i
 
 ![Select Project](/media/images/GC_Select_Project.png)
 
-3. Click at ADD SERVICE ACCOUNT.
+3. Click at + CREAT SERVICE ACCOUNT.
 
 ![Create SA](/media/images/GC_Create_SA.png)
 
@@ -104,6 +128,10 @@ Go to [Google Cloud Console](https://console.cloud.google.com/projectselector2/i
 
 ![Create SA9](/media/images/GC_Create_SA9.png)
 
+In the following stepts (15-16) for saving the Service Account Credential in flash memory at compile time.
+
+If you want to allow library to read the Service Account JSON key file directly at run time, skip these steps.
+
 15. Open the .json file that is already downloaded with text editor.
 
 ```json
@@ -129,19 +157,26 @@ Go to [Google Cloud Console](https://console.cloud.google.com/projectselector2/i
 const char PRIVATE_KEY[] PROGMEM = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"; //Taken from "private_key" key in JSON file.
 ```
 
+
 ## Usages
 
 ```cpp
 
 #include <Arduino.h>
-#include <Arduino.h>
-#if defined(ESP32)
+#if defined(ESP32) || defined(ARDUINO_RASPBERRY_PI_PICO_W)
 #include <WiFi.h>
 #elif defined(ESP8266)
 #include <ESP8266WiFi.h>
 #endif
 
 #include <ESPSigner.h>
+
+#define WIFI_SSID "..."
+#define WIFI_PASSWORD "..."
+
+#if defined(ARDUINO_RASPBERRY_PI_PICO_W)
+WiFiMulti multi;
+#endif
 
 SignerConfig config;
 
@@ -150,88 +185,109 @@ void tokenStatusCallback(TokenInfo info);
 void setup()
 {
 
-    Serial.begin(115200);
-    Serial.println();
-    Serial.println();
+  Serial.begin(115200);
+  Serial.println();
+  Serial.println();
 
-    WiFi.setAutoReconnect(true);
+#if defined(ESP32) || defined(ESP8266)
+  WiFi.setAutoReconnect(true);
+#endif
 
-    WiFi.begin("WiFi SSID", "WIFi PSK");
-    Serial.print("Connecting to Wi-Fi");
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        Serial.print(".");
-        delay(300);
-    }
-    Serial.println();
-    Serial.print("Connected with IP: ");
-    Serial.println(WiFi.localIP());
-    Serial.println();
+#if defined(ARDUINO_RASPBERRY_PI_PICO_W)
+  multi.addAP(WIFI_SSID, WIFI_PASSWORD);
+  multi.run();
+#else
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+#endif
 
-    /* Assign the sevice account credentials and private key (required) */
-    config.service_account.data.client_email = "...";
-    config.service_account.data.project_id = "...";
-    config.service_account.data.private_key = "...";
+  Serial.print("Connecting to Wi-Fi");
+  unsigned long ms = millis();
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    delay(300);
+#if defined(ARDUINO_RASPBERRY_PI_PICO_W)
+    if (millis() - ms > 10000)
+      break;
+#endif
+  }
+  Serial.println();
+  Serial.print("Connected with IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
 
-    /** Expired period in seconds (optional). 
-     * Default is 3600 sec.
-     * This may not afftect the expiry time of generated access token.
-    */
-    config.signer.expiredSeconds = 3600;
+  // The WiFi credentials are required for Pico W
+  // due to it does not have reconnect feature.
+#if defined(ARDUINO_RASPBERRY_PI_PICO_W)
+  config.wifi.clearAP();
+  config.wifi.addAP(WIFI_SSID, WIFI_PASSWORD);
+#endif
 
-    /* Seconds to refresh the token before expiry time (optional). Default is 60 sec.*/
-    config.signer.preRefreshSeconds = 60;
 
-    /** Assign the API scopes (required) 
-     * Use space or comma to separate the scope.
-    */
-    config.signer.tokens.scope = "https://www.googleapis.com/auth/cloud-platform, https://www.googleapis.com/auth/userinfo.email";
+  /* Assign the sevice account credentials and private key (required) */
+  config.service_account.data.client_email = "...";
+  config.service_account.data.project_id = "...";
+  config.service_account.data.private_key = "...";
 
-    /** Assign the callback function for token ggeneration status (optional) */
-    config.token_status_callback = tokenStatusCallback;
+  /** Expired period in seconds (optional). 
+  * Default is 3600 sec.
+  * This may not afftect the expiry time of generated access token.
+  */
+  config.signer.expiredSeconds = 3600;
 
-    //To set the device time without NTP time acquisition.
-    //Signer.setSystemTime(<timestamp>);
+  /* Seconds to refresh the token before expiry time (optional). Default is 60 sec.*/
+  config.signer.preRefreshSeconds = 60;
 
-    /* Create token */
-    Signer.begin(&config);
+  /** Assign the API scopes (required) 
+  * Use space or comma to separate the scope.
+  */
+  config.signer.tokens.scope = "https://www.googleapis.com/auth/cloud-platform, https://www.googleapis.com/auth/userinfo.email";
 
-    //The WiFi connection can be processed before or after Signer.begin
+  /** Assign the callback function for token ggeneration status (optional) */
+  config.token_status_callback = tokenStatusCallback;
 
-    //Call Signer.getExpiredTimestamp() to get the token expired timestamp (seconds from midnight Jan 1, 1970)
+  //To set the device time without NTP time acquisition.
+  //Signer.setSystemTime(<timestamp>);
 
-    //Call Signer.refreshToken() to force refresh the token.
+  /* Create token */
+  Signer.begin(&config);
+
+  //The WiFi connection can be processed before or after Signer.begin
+
+  //Call Signer.getExpiredTimestamp() to get the token expired timestamp (seconds from midnight Jan 1, 1970)
+
+  //Call Signer.refreshToken() to force refresh the token.
 }
 
 void loop()
 {
 
-    /* Check for token generation ready state and also refresh the access token if it expired */
-    bool ready = Signer.tokenReady();
-    if (ready)
-    {
-        int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - time(nullptr);
-        //Token will be refreshed automatically
+  /* Check for token generation ready state and also refresh the access token if it expired */
+  bool ready = Signer.tokenReady();
+  if (ready)
+  {
+    int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - time(nullptr);
+    //Token will be refreshed automatically
 
-        Serial.print("Remaining seconds to refresh the token, ");
-        Serial.println(t);
-        delay(1000);
+    Serial.print("Remaining seconds to refresh the token, ");
+    Serial.println(t);
+    delay(1000);
     }
 }
 
 void tokenStatusCallback(TokenInfo info)
 {
-    if (info.status == esp_signer_token_status_error)
-    {
-        Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
-        Serial.printf("Token error: %s\n", Signer.getTokenError(info).c_str());
-    }
-    else
-    {
-        Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
-        if (info.status == esp_signer_token_status_ready)
-            Serial.printf("Token: %s\n", Signer.accessToken().c_str());
-    }
+  if (info.status == esp_signer_token_status_error)
+  {
+    Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
+    Serial.printf("Token error: %s\n", Signer.getTokenError(info).c_str());
+  }
+  else
+  {
+    Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
+    if (info.status == esp_signer_token_status_ready)
+      erial.printf("Token: %s\n", Signer.accessToken().c_str());
+  }
 }
 
 ```
@@ -314,6 +370,39 @@ void begin(SignerConfig *config);
 
 ```cpp
 void end();
+```
+
+
+
+#### Assign external Arduino Client and required callback fumctions.
+
+param **`client`** The pointer to Arduino Client derived class of SSL Client.
+
+param **`networkConnectionCB`** The function that handles the network connection.
+
+param **`networkStatusCB`** The function that handle the network connection status acknowledgement.
+
+```cpp
+void setExternalClient(Client *client, ESP_Signer_NetworkConnectionRequestCallback networkConnectionCB,
+                           ESP_Signer_NetworkStatusRequestCallback networkStatusCB);
+```
+
+####  Assign UDP client and gmt offset for NTP time synching when using external SSL client
+
+param **`client`** The pointer to UDP client based on the network type.
+
+param **`gmtOffset`** The GMT time offset.
+
+```cpp
+void setUDPClient(UDP *client, float gmtOffset = 0);
+```
+
+####  Set the network status acknowledgement.
+
+param **`status`** The network status.
+
+```cpp
+void setNetworkStatus(bool status);
 ```
 
 
@@ -401,69 +490,81 @@ bool setSystemTime(time_t ts);
 ```
 
 
+#### Initiate SD card with SPI port configuration.
 
+param **`ss`** The SPI Chip/Slave Select pin.
 
-#### SD card config with GPIO pins.
+param **`sck`** The SPI Clock pin.
 
-param **`ss`** SPI Chip/Slave Select pin.
+param **`miso`** The SPI MISO pin.
 
-param **`sck`** SPI Clock pin.
+param **`mosi`** The SPI MOSI pin.
 
-param **`miso`** SPI MISO pin.
+aram **`frequency`** The SPI frequency.
 
-param **`mosi`** SPI MOSI pin.
-
-return **`Boolean`** type status indicates the success of the operation.
+return **`boolean`** The boolean value indicates the success of operation.
 
 ```cpp
-bool sdBegin( int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
+bool sdBegin(int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1, uint32_t frequency = 4000000);
 ```
 
 
+#### Initiate SD card with SD FS configurations (ESP8266 only).
 
-#### SD card config with SD FS configurations (ESP8266 only).
+param **`ss`** SPI Chip/Slave Select pin.
 
 param **`sdFSConfig`** The pointer to SDFSConfig object (ESP8266 only).
 
-return **`Boolean`** type status indicates the success of the operation.
+return **`boolean`** type status indicates the success of the operation.
 
 ```cpp
-bool sdBegin(SDFSConfig *sdFSConfig);
+  bool sdBegin(SDFSConfig *sdFSConfig);
 ```
 
 
+#### Initiate SD card with chip select and SPI configuration (ESP32 only).
 
-#### SD card config with chip select and SPI configuration (ESP32 only).
+param **`ss`** The SPI Chip/Slave Select pin.
 
-param **`ss`** SPI Chip/Slave Select pin.
+param **`spiConfig`** The pointer to SPIClass object for SPI configuartion.
 
-param **`spiConfig`** The pointer to SPIClass object for SPI configuartion (ESP32 only).
+param **`frequency`** The SPI frequency.
 
-return **`Boolean`** type status indicates the success of the operation.
+return **`boolean`** The boolean value indicates the success of operation.
 
 ```cpp
-bool sdBegin(int8_t ss, SPIClass *spiConfig = nullptr);
+bool sdBegin(int8_t ss, SPIClass *spiConfig = nullptr, uint32_t frequency = 4000000);
 ```
 
 
-#### SD card config with SdFat SPI and pins configurations (ESP32 with SdFat included only).
+#### Initiate SD card with SdFat SPI and pins configurations (with SdFat included only).
 
 param **`sdFatSPIConfig`** The pointer to SdSpiConfig object for SdFat SPI configuration.
 
-param **`ss`** SPI Chip/Slave Select pin.
+param **`ss`** The SPI Chip/Slave Select pin.
 
-param **`sck`** SPI Clock pin.
+param **`sck`** The SPI Clock pin.
 
-param **`miso`** SPI MISO pin.
+param **`miso`** The SPI MISO pin.
 
-param **`mosi`** SPI MOSI pin.
+param **`mosi`** The SPI MOSI pin.
 
-return **`Boolean`** type status indicates the success of the operation.
+return **`boolean`** The boolean value indicates the success of operation.
 
 ```cpp
-bool sdBegin(SdSpiConfig *sdFatSPIConfig, int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
+ bool sdBegin(SdSpiConfig *sdFatSPIConfig, int8_t ss = -1, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
 ```
 
+
+#### Initiate SD card with SdFat SDIO configuration (with SdFat included only).
+
+param **`sdFatSDIOConfig`** The pointer to SdioConfig object for SdFat SDIO configuration.
+
+return **`boolean`** The boolean value indicates the success of operation.
+
+```cpp
+ bool sdBegin(SdioConfig *sdFatSDIOConfig);
+```
 
 
 #### Initialize the SD_MMC card (ESP32 only).
@@ -477,7 +578,7 @@ param **`format_if_mount_failed`** Format SD_MMC card if mount failed.
 return **`Boolean`** type status indicates the success of the operation.
 
 ```cpp
-bool sdMMCBegin(<string> mountpoint = "/sdcard", bool mode1bit = false, bool format_if_mount_failed = false);
+bool sdMMCBegin(const char *mountpoint = "/sdcard", bool mode1bit = false, bool format_if_mount_failed = false);
 ```
 
 
@@ -485,7 +586,7 @@ bool sdMMCBegin(<string> mountpoint = "/sdcard", bool mode1bit = false, bool for
 
 The MIT License (MIT)
 
-Copyright (c) 2022 K. Suwatchai (Mobizt)
+Copyright (c) 2023 K. Suwatchai (Mobizt)
 
 
 Permission is hereby granted, free of charge, to any person returning a copy of

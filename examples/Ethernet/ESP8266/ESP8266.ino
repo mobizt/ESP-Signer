@@ -1,54 +1,67 @@
 
 /**
  * Created by K. Suwatchai (Mobizt)
- * 
- * Email: k_suwatchai@hotmail.com
- * 
- * Github: https://github.com/mobizt
- * 
- * Copyright (c) 2021 mobizt
  *
-*/
+ * Email: k_suwatchai@hotmail.com
+ *
+ * Github: https://github.com/mobizt
+ *
+ * Copyright (c) 2023 mobizt
+ *
+ */
 
-//This example show how to get access token using ESP8266 and ENC28J60 Ethernet module.
+// This example show how to get access token using ESP8266 and ENC28J60 Ethernet module.
 
 /**
- * 
+ *
  * The ENC28J60 Ethernet module and ESP8266 board, SPI port wiring connection.
- * 
- * ESP8266 (Wemos D1 Mini or NodeMCU)        ENC28J60         
- * 
+ *
+ * ESP8266 (Wemos D1 Mini or NodeMCU)        ENC28J60
+ *
  * GPIO12 (D6) - MISO                        SO
  * GPIO13 (D7) - MOSI                        SI
  * GPIO14 (D5) - SCK                         SCK
  * GPIO16 (D0) - CS                          CS
  * GND                                       GND
  * 3V3                                       VCC
- * 
-*/
+ *
+ */
+
+/**
+ * Do not forget to defines the following macros in FS_Config.h
+ *
+ * For ESP8266 ENC28J60 Ethernet module
+ * #define ESP_SIGNER_ENABLE_ESP8266_ENC28J60_ETH
+ *
+ * For ESP8266 W5100 Ethernet module
+ * #define ESP_SIGNER_ENABLE_ESP8266_W5100_ETH
+ *
+ * For ESP8266 W5500 Ethernet module
+ * #define ESP_SIGNER_ENABLE_ESP8266_W5500_ETH
+ *
+ */
 #include <Arduino.h>
 
 #include <ESP_Signer.h>
 
-
 #include <ENC28J60lwIP.h>
-//#include <W5100lwIP.h>
-//#include <W5500lwIP.h>
+// #include <W5100lwIP.h>
+// #include <W5500lwIP.h>
 
 /** These credentials are taken from Service Account key file (JSON)
  * https://cloud.google.com/iam/docs/service-accounts
-*/
+ */
 // See https://github.com/mobizt/ESP-Signer#how-to-create-service-account-private-key
 
-#define PROJECT_ID "The project ID"                                                             //Taken from "project_id" key in JSON file.
-#define CLIENT_EMAIL "Client Email"                                                             //Taken from "client_email" key in JSON file.
-const char PRIVATE_KEY[] PROGMEM = "-----BEGIN PRIVATE KEY-----\\n-----END PRIVATE KEY-----\n"; //Taken from "private_key" key in JSON file.
+#define PROJECT_ID "The project ID"                                                             // Taken from "project_id" key in JSON file.
+#define CLIENT_EMAIL "Client Email"                                                             // Taken from "client_email" key in JSON file.
+const char PRIVATE_KEY[] PROGMEM = "-----BEGIN PRIVATE KEY-----\\n-----END PRIVATE KEY-----\n"; // Taken from "private_key" key in JSON file.
 
-#define ETH_CS_PIN 16 //D0
+#define ETH_CS_PIN 16 // D0
 
 ENC28J60lwIP eth(ETH_CS_PIN);
-//Wiznet5100lwIP eth(ETH_CS_PIN);
-//Wiznet5500lwIP eth(ETH_CS_PIN);
+// Wiznet5100lwIP eth(ETH_CS_PIN);
+// Wiznet5500lwIP eth(ETH_CS_PIN);
 
 SignerConfig config;
 
@@ -76,7 +89,7 @@ void begin()
     config.signer.tokens.scope = "https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/drive.file";
 
     config.spi_ethernet_module.enc28j60 = &eth;
-    
+
     Signer.begin(&config);
 }
 
@@ -122,7 +135,7 @@ void loop()
         begin();
     }
 
-    //Check to status and also refresh the access token
+    // Check to status and also refresh the access token
     bool ready = Signer.tokenReady();
     if (ready)
     {

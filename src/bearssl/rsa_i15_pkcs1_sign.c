@@ -22,9 +22,9 @@
  * SOFTWARE.
  */
 
-#ifdef ESP8266
-
 #include "inner.h"
+#include <Arduino.h>
+#if defined(ESP8266) || defined(PICO_RP2040)
 
 /* see bearssl_rsa.h */
 uint32_t
@@ -36,7 +36,7 @@ br_rsa_i15_pkcs1_sign(const unsigned char *hash_oid,
 		return 0;
 	}
 	
-	delay(0);
+	esp_bssl_idle();
 
 	return br_rsa_i15_private(x, sk);
 }

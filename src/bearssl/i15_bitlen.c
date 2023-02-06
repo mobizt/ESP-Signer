@@ -21,10 +21,10 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
-#ifdef ESP8266
-
 #include "inner.h"
+#include <Arduino.h>
+#if defined(ESP8266) || defined(PICO_RP2040)
+
 
 /* see inner.h */
 uint32_t
@@ -36,7 +36,7 @@ br_i15_bit_length(uint16_t *x, size_t xlen)
 	twk = 0;
 	while (xlen -- > 0) {
 		uint32_t w, c;
-		delay(0);
+		esp_bssl_idle();
 
 		c = EQ(tw, 0);
 		w = x[xlen];

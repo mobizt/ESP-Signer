@@ -1,12 +1,12 @@
 /**
- * The MB_FS, file wrapper class v1.0.3.
+ * The MB_FS, filesystems wrapper class v1.0.13
  *
- * This wrapper class is for SD and Flash file interfaces which support SdFat in ESP32 (//https://github.com/greiman/SdFat)
+ * This wrapper class is for SD and Flash filesystems interface which supports SdFat (//https://github.com/greiman/SdFat)
  *
- *  Created February 28, 2022
+ *  Created February 4, 2023
  *
  * The MIT License (MIT)
- * Copyright (c) 2022 K. Suwatchai (Mobizt)
+ * Copyright (c) 2023 K. Suwatchai (Mobizt)
  *
  *
  * Permission is hereby granted, free of charge, to any person returning a copy of
@@ -31,11 +31,29 @@
 #define MBFS_CLASS_H
 
 #define FS_NO_GLOBALS
-#if defined(ESP32) || defined(ESP8266)
+#if defined(ESP32) || defined(ESP8266) || defined(PICO_RP2040)
 #include <FS.h>
 #endif
 #include "MB_FS_Interfaces.h"
-#include "json/FirebaseJson.h"
+#include MB_STRING_INCLUDE_CLASS
+#include "SPI.h"
+
+#if defined(ESP32) && __has_include(<sys/stat.h>)
+#if MBFS_FLASH_FS == LittleFS
+#define MB_FS_USE_POSIX_STAT
+#include <sys/stat.h>
+namespace mb_fs_ns
+{
+    inline bool exists(const char *mountPoint, const char *filename)
+    {
+        MB_String path = mountPoint;
+        path += filename;
+        struct stat st;
+        return stat(path.c_str(), &st) == 0;
+    }
+};
+#endif
+#endif
 
 using namespace mb_string;
 
@@ -95,9 +113,13 @@ struct mbfs_sd_config_info_t
     int sck = -1;
     int miso = -1;
     int mosi = -1;
+    uint32_t frequency = 4000000;
 
 #if defined(MBFS_ESP32_SDFAT_ENABLED) || defined(MBFS_SDFAT_ENABLED)
+
     SdSpiConfig *sdFatSPIConfig = nullptr;
+    SdioConfig *sdFatSDIOConfig = nullptr;
+
 #endif
 
 #if defined(ESP32)
@@ -113,7 +135,7 @@ struct mbfs_sd_config_info_t
 #endif
 };
 
-#elif defined(ESP8266)
+#elif defined(ESP8266) || defined(PICO_RP2040)
 struct mbfs_sd_config_info_t
 {
     int ss = -1;
@@ -138,7 +160,7 @@ public:
     struct mbfs_sd_config_info_t sd_config;
 
     // Assign the SD card interfaces with GPIO pins.
-    bool sdBegin(int ss = -1, int sck = -1, int miso = -1, int mosi = -1)
+    bool sdBegin(int ss = -1, int sck = -1, int miso = -1, int mosi = -1, uint32_t frequency = 4000000)
     {
         if (sd_rdy)
             return true;
@@ -150,9 +172,17 @@ public:
         sd_config.miso = miso;
         sd_config.mosi = mosi;
         SPI.begin(sck, miso, mosi, ss);
-        return sdSPIBegin(ss, &SPI);
+        sd_config.frequency = frequency;
+        return sdSPIBegin(ss, &SPI, frequency);
 #elif defined(ESP8266) || defined(ARDUINO_ARCH_SAMD) || defined(__AVR_ATmega4809__) || defined(ARDUINO_NANO_RP2040_CONNECT)
         sd_rdy = MBFS_SD_FS.begin(ss);
+        return sd_rdy;
+#elif defined(PICO_RP2040)
+        SDFSConfig c;
+        c.setCSPin(ss);
+        c.setSPISpeed(frequency);
+        MBFS_SD_FS.setConfig(c);
+        sd_rdy = MBFS_SD_FS.begin();
         return sd_rdy;
 #endif
 
@@ -163,11 +193,13 @@ public:
 #if defined(ESP32) && defined(MBFS_SD_FS) && defined(MBFS_CARD_TYPE_SD)
 
     // Assign the SD card interfaces with SPIClass object pointer (ESP32 only).
-    bool sdSPIBegin(int ss, SPIClass *spiConfig)
+    bool sdSPIBegin(int ss, SPIClass *spiConfig, uint32_t frequency)
     {
 
         if (sd_rdy)
             return true;
+
+        sd_config.frequency = frequency;
 
 #if defined(ESP32)
 
@@ -180,12 +212,12 @@ public:
 
 #if !defined(MBFS_ESP32_SDFAT_ENABLED) || defined(MBFS_SDFAT_ENABLED)
         if (ss > -1)
-            sd_rdy = MBFS_SD_FS.begin(ss, *sd_config.spiConfig);
+            sd_rdy = MBFS_SD_FS.begin(ss, *sd_config.spiConfig, frequency);
         else
             sd_rdy = MBFS_SD_FS.begin();
 #endif
 
-#elif defined(ESP8266)
+#elif defined(ESP8266) || defined(PICO_RP2040)
 
         cfg->_int.sd_config.sck = sck;
 
@@ -202,7 +234,7 @@ public:
 
 #if defined(MBFS_ESP32_SDFAT_ENABLED) || defined(MBFS_SDFAT_ENABLED)
 
-    // Assign the SD card interfaces with SdSpiConfig object pointer and SPI pins assignment (ESP32 only).
+    // Assign the SD card interfaces with SdSpiConfig object pointer and SPI pins assignment.
     bool sdFatBegin(SdSpiConfig *sdFatSPIConfig, int ss, int sck, int miso, int mosi)
     {
 
@@ -226,10 +258,35 @@ public:
 
         return false;
     }
+
+    // Assign the SD card interfaces with SdioConfig object pointer.
+    bool sdFatBegin(SdioConfig *sdFatSDIOConfig)
+    {
+
+        if (sd_rdy)
+            return true;
+
+#if defined(HAS_SDIO_CLASS) // Default is 0 (no SDIO) in SdFatConfig.h
+
+#if HAS_SDIO_CLASS
+
+        if (sdFatSDIOConfig)
+        {
+            sd_config.sdFatSDIOConfig = sdFatSDIOConfig;
+
+            sd_rdy = MBFS_SD_FS.begin(*sd_config.sdFatSDIOConfig);
+            return sd_rdy;
+        }
 #endif
 
-#if defined(ESP8266) && defined(MBFS_SD_FS)
-    // Assign the SD card interfaces with SDFSConfig object pointer (ESP8266 only).
+#endif
+
+        return false;
+    }
+#endif
+
+#if (defined(ESP8266) || defined(PICO_RP2040)) && defined(MBFS_SD_FS)
+    // Assign the SD card interfaces with SDFSConfig object pointer (ESP8266 and Pico only).
     bool sdFatBegin(SDFSConfig *sdFSConfig)
     {
 
@@ -285,7 +342,7 @@ public:
         flash_rdy = MBFS_FLASH_FS.begin();
 #endif
 
-#elif defined(ESP8266)
+#elif defined(ESP8266) || defined(PICO_RP2040)
         flash_rdy = MBFS_FLASH_FS.begin();
 #endif
 
@@ -316,20 +373,26 @@ public:
 
 #if defined(MBFS_ESP32_SDFAT_ENABLED) || defined(MBFS_SDFAT_ENABLED)
 
-        if (sd_config.sdFatSPIConfig && !sd_rdy)
-            sd_rdy = MBFS_SD_FS.begin(*sd_config.sdFatSPIConfig);
+        if (!sd_rdy)
+        {
+            if (sd_config.sdFatSPIConfig)
+                sd_rdy = MBFS_SD_FS.begin(*sd_config.sdFatSPIConfig);
+            else if (sd_config.sdFatSDIOConfig)
+                sd_rdy = MBFS_SD_FS.begin(*sd_config.sdFatSDIOConfig);
+        }
+
 #else
         if (!sd_rdy)
-            sd_rdy = sdSPIBegin(sd_config.ss, sd_config.spiConfig);
+            sd_rdy = sdSPIBegin(sd_config.ss, sd_config.spiConfig, sd_config.frequency);
 
 #endif
 
 #elif defined(MBFS_CARD_TYPE_SD_MMC)
         if (!sd_rdy)
-            sd_rdy = sdMMCBegin(sd_config.sd_mmc_mountpoint, sd_config.sd_mmc_mode1bit, sd_config.sd_mmc_format_if_mount_failed);
+            sd_rdy = sdMMCBegin(sd_config.sdMMCConfig.mountpoint, sd_config.sdMMCConfig.mode1bit, sd_config.sdMMCConfig.format_if_mount_failed);
 #endif
 
-#elif defined(ESP8266)
+#elif defined(ESP8266) || defined(PICO_RP2040)
         if (!sd_rdy)
         {
             if (sd_config.sdFSConfig)
@@ -561,7 +624,7 @@ public:
     {
 
 #if defined(MBFS_FLASH_FS)
-        if (type == mbfs_flash && mb_flashFs)
+        if (type == mbfs_flash && mb_flashFs && flash_opened)
         {
             mb_flashFs.close();
             flash_filename_crc = 0;
@@ -571,7 +634,7 @@ public:
 #endif
 
 #if defined(MBFS_SD_FS)
-        if (type == mbfs_sd && mb_sdFs)
+        if (type == mbfs_sd && mb_sdFs && sd_opened)
         {
             mb_sdFs.close();
             sd_filename_crc = 0;
@@ -585,9 +648,22 @@ public:
     bool existed(const MB_String &filename, mbfs_file_type type)
     {
 
+        if (!checkStorageReady(type))
+            return false;
+
 #if defined(MBFS_FLASH_FS)
         if (type == mbfs_flash)
+        {
+
+// The workaround for ESP32 LittleFS when calling vfs_api.cpp open() issue.
+// See https://github.com/espressif/arduino-esp32/issues/7615
+#if defined(MB_FS_USE_POSIX_STAT)
+            return mb_fs_ns::exists("/littlefs", filename.c_str());
+#else
             return MBFS_FLASH_FS.exists(filename.c_str());
+#endif
+        }
+
 #endif
 
 #if defined(MBFS_SD_FS)
@@ -608,16 +684,19 @@ public:
     }
 
     // Seek to position in file.
-    void seek(mbfs_file_type type, int pos)
+    bool seek(mbfs_file_type type, int pos)
     {
+
 #if defined(MBFS_FLASH_FS)
         if (type == mbfs_flash && mb_flashFs)
-            mb_flashFs.seek(pos);
+            return mb_flashFs.seek(pos);
 #endif
 #if defined(MBFS_SD_FS)
         if (type == mbfs_sd && mb_sdFs)
-            mb_sdFs.seek(pos);
+            return mb_sdFs.seek(pos);
 #endif
+
+        return false;
     }
 
     // Read byte. Return the 1 for completed read or negative value for error.
@@ -650,6 +729,19 @@ public:
 
     bool remove(const MB_String &filename, mbfs_file_type type)
     {
+        if (!checkStorageReady(type))
+            return false;
+
+#if defined(MBFS_FLASH_FS)
+        if (type == mbfs_flash && !flashReady())
+            return false;
+#endif
+
+#if defined(MBFS_SD_FS)
+        if (type == mbfs_sd && !sdReady())
+            return false;
+#endif
+
         if (!existed(filename, type))
             return true;
 
@@ -736,7 +828,7 @@ public:
     }
 
     // Allocate memory
-    void *newP(size_t len)
+    void *newP(size_t len, bool clear = true)
     {
         void *p;
         size_t newLen = getReservedLen(len);
@@ -767,7 +859,8 @@ public:
             return NULL;
 
 #endif
-        memset(p, 0, newLen);
+        if (clear)
+            memset(p, 0, newLen);
         return p;
     }
 
@@ -783,14 +876,14 @@ public:
         return (size_t)newlen;
     }
 
-    void createDirs(MB_String dirs)
+    void createDirs(MB_String dirs, mbfs_file_type type)
     {
         if (!longNameSupported())
             return;
 
-#if defined(MBFS_SD_FS)
         MB_String dir;
         int count = 0;
+        int lastPos = 0;
         for (size_t i = 0; i < dirs.length(); i++)
         {
             dir.append(1, dirs[i]);
@@ -798,15 +891,41 @@ public:
             if (dirs[i] == '/' && i > 0)
             {
                 if (dir.length() > 0)
-                    MBFS_SD_FS.mkdir(dir.substr(0, dir.length() - 1).c_str());
+                {
+
+                    lastPos = dir.length() - 1;
+
+#if defined(MBFS_FLASH_FS)
+                    if (type == mbfs_flash)
+                        MBFS_FLASH_FS.mkdir(dir.substr(0, dir.length() - 1).c_str());
+#endif
+
+#if defined(MBFS_SD_FS)
+                    if (type == mbfs_sd)
+                        MBFS_SD_FS.mkdir(dir.substr(0, dir.length() - 1).c_str());
+#endif
+                }
                 count = 0;
             }
         }
 
         if (count > 0)
-            MBFS_SD_FS.mkdir(dir.c_str());
-        dir.clear();
+        {
+            if (dir.find('.', lastPos) == MB_String::npos)
+            {
+#if defined(MBFS_FLASH_FS)
+                if (type == mbfs_flash)
+                    MBFS_FLASH_FS.mkdir(dir.c_str());
 #endif
+
+#if defined(MBFS_SD_FS)
+                if (type == mbfs_sd)
+                    MBFS_SD_FS.mkdir(dir.c_str());
+#endif
+            }
+        }
+
+        dir.clear();
     }
 
     bool longNameSupported()
@@ -816,7 +935,7 @@ public:
         return true;
 #endif
 
-#if defined(MBFS_SD_FS) && (defined(ESP32) || defined(ESP8266))
+#if defined(MBFS_SD_FS) && (defined(ESP32) || defined(ESP8266) || defined(PICO_RP2040))
         return true;
 #endif
 
@@ -833,6 +952,7 @@ private:
     bool sd_opened = false;
     bool sd_rdy = false;
     bool flash_rdy = false;
+    uint16_t loopCount = 0;
 
 #if defined(MBFS_FLASH_FS)
     fs::File mb_flashFs;
@@ -861,7 +981,7 @@ private:
 
 #if defined(MBFS_SD_FS)
 
-        if (mode == mb_fs_open_mode_read || mode == mb_fs_open_mode_write)
+        if (mode == mb_fs_open_mode_read || mode == mb_fs_open_mode_write || mode == mb_fs_open_mode_append)
         {
             uint16_t crc = calCRC(filename.c_str());
 
@@ -886,9 +1006,12 @@ private:
                 ret = mb_sdFs.size();
             }
         }
-        else if (mode == mb_fs_open_mode_write)
+        else if (mode == mb_fs_open_mode_write || mode == mb_fs_open_mode_append)
         {
-            remove(filename, mb_fs_mem_storage_type_sd);
+            if (mode == mb_fs_open_mode_write)
+                remove(filename, mb_fs_mem_storage_type_sd);
+
+            createDirs(filename, mb_fs_mem_storage_type_sd);
             if (mb_sdFs.open(filename.c_str(), O_RDWR | O_CREAT | O_APPEND))
             {
                 sd_file = filename;
@@ -902,7 +1025,11 @@ private:
 
         if (mode == mb_fs_open_mode_read)
         {
+#if defined(ESP32) || defined(ESP8266)
             mb_sdFs = MBFS_SD_FS.open(filename.c_str(), FILE_READ);
+#else
+            mb_sdFs = MBFS_SD_FS.open(filename.c_str(), "r");
+#endif
             if (mb_sdFs)
             {
                 sd_file = filename;
@@ -911,10 +1038,26 @@ private:
                 ret = mb_sdFs.size();
             }
         }
-        else if (mode == mb_fs_open_mode_write)
+        else if (mode == mb_fs_open_mode_write || mode == mb_fs_open_mode_append)
         {
-            remove(filename, mb_fs_mem_storage_type_sd);
+            if (mode == mb_fs_open_mode_write)
+                remove(filename, mb_fs_mem_storage_type_sd);
+
+            createDirs(filename, mb_fs_mem_storage_type_sd);
+#if defined(ESP32)
+            if (mode == mb_fs_open_mode_write)
+                mb_sdFs = MBFS_SD_FS.open(filename.c_str(), FILE_WRITE);
+            else
+                mb_sdFs = MBFS_SD_FS.open(filename.c_str(), FILE_APPEND);
+#elif defined(ESP8266)
             mb_sdFs = MBFS_SD_FS.open(filename.c_str(), FILE_WRITE);
+#else
+            if (mode == mb_fs_open_mode_write)
+                mb_sdFs = MBFS_SD_FS.open(filename.c_str(), "w");
+            else
+                mb_sdFs = MBFS_SD_FS.open(filename.c_str(), "a");
+#endif
+
             if (mb_sdFs)
             {
                 sd_file = filename;
@@ -935,7 +1078,7 @@ private:
 
 #if defined(MBFS_FLASH_FS)
 
-        if (mode == mb_fs_open_mode_read || mode == mb_fs_open_mode_write)
+        if (mode == mb_fs_open_mode_read || mode == mb_fs_open_mode_write || mode == mb_fs_open_mode_append)
         {
             uint16_t crc = calCRC(filename.c_str());
             if (mode == flash_open_mode && sd_filename_crc == crc && flash_opened) // same flash file opened, leave it
@@ -958,10 +1101,17 @@ private:
                 ret = mb_flashFs.size();
             }
         }
-        else if (mode == mb_fs_open_mode_write)
+        else if (mode == mb_fs_open_mode_write || mode == mb_fs_open_mode_append)
         {
-            remove(filename, mb_fs_mem_storage_type_flash);
-            mb_flashFs = MBFS_FLASH_FS.open(filename.c_str(), "w");
+            if (mode == mb_fs_open_mode_write)
+                remove(filename, mb_fs_mem_storage_type_flash);
+
+            createDirs(filename, mb_fs_mem_storage_type_flash);
+            if (mode == mb_fs_open_mode_write)
+                mb_flashFs = MBFS_FLASH_FS.open(filename.c_str(), "w");
+            else
+                mb_flashFs = MBFS_FLASH_FS.open(filename.c_str(), "a");
+
             if (mb_flashFs)
             {
                 flash_file = filename;

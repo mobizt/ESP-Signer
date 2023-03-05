@@ -29,6 +29,8 @@
 #ifndef GAUTH_MANAGER_CPP
 #define GAUTH_MANAGER_CPP
 
+#include <Arduino.h>
+#include "mbfs/MB_MCU.h"
 #include "GAuth_OAuth2_Client.h"
 
 GAuth_OAuth2_Client::GAuth_OAuth2_Client()
@@ -184,7 +186,7 @@ time_t GAuth_OAuth2_Client::getTime()
 bool GAuth_OAuth2_Client::setTime(time_t ts)
 {
 
-#if !defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT) && (defined(ESP8266) || defined(ESP32) || defined(PICO_RP2040))
+#if !defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT) && (defined(ESP8266) || defined(ESP32) || defined(MB_ARDUINO_PICO))
 
     if (TimeHelper::setTimestamp(ts) == 0)
     {
@@ -428,7 +430,7 @@ void GAuth_OAuth2_Client::tokenProcessingTask()
     // flag set for valid time required
     bool sslValidTime = false;
 
-#if defined(ESP8266) || defined(PICO_RP2040)
+#if defined(ESP8266) || defined(MB_ARDUINO_PICO)
     // valid time required for SSL handshake using server certificate in ESP8266
     if (config->cert.data != NULL || config->cert.file.length() > 0)
         sslValidTime = true;
@@ -889,7 +891,7 @@ bool GAuth_OAuth2_Client::createJWT()
             MemoryHelper::freeBuffer(mbfs, config->signer.hash);
             return false;
         }
-#elif defined(ESP8266) || defined(PICO_RP2040)
+#elif defined(ESP8266) || defined(MB_ARDUINO_PICO)
         config->signer.hash = MemoryHelper::createBuffer<char *>(mbfs, config->signer.hashSize);
         br_sha256_context mc;
         br_sha256_init(&mc);
@@ -990,7 +992,7 @@ bool GAuth_OAuth2_Client::createJWT()
 
         if (ret != 0)
             return false;
-#elif defined(ESP8266) || defined(PICO_RP2040)
+#elif defined(ESP8266) || defined(MB_ARDUINO_PICO)
         // RSA private key
         BearSSL::PrivateKey *pk = nullptr;
         Utils::idle();

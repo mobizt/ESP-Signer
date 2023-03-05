@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.cpp version 1.3.0
+ * Google's OAuth2.0 Access token Generation class, Signer.cpp version 1.3.1
  *
  * This library used RS256 for signing algorithm.
  *
@@ -7,7 +7,7 @@
  *
  * This library supports ESP8266, ESP32 and Raspberry Pi Pico.
  *
- * Created February 6, 2023
+ * Created Match 5, 2023
  *
  * The MIT License (MIT)
  * Copyright (c) 2023 K. Suwatchai (Mobizt)
@@ -33,6 +33,8 @@
 
 #ifndef ESP_SIGNER_CPP
 #define ESP_SIGNER_CPP
+#include <Arduino.h>
+#include "mbfs/MB_MCU.h"
 #include "ESP_Signer.h"
 
 ESP_Signer::ESP_Signer()
@@ -124,7 +126,7 @@ bool ESP_Signer::setSecure()
     if (!authClient.reconnect(client))
         return false;
 
-#if (defined(ESP8266) || defined(PICO_RP2040))
+#if (defined(ESP8266) || defined(MB_ARDUINO_PICO))
     if (TimeHelper::getTime(&mb_ts, &mb_ts_offset) > ESP_SIGNER_DEFAULT_TS)
     {
         config->internal.clock_rdy = true;

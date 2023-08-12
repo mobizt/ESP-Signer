@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.cpp version 1.4.0
+ * Google's OAuth2.0 Access token Generation class, Signer.cpp version 1.4.1
  *
  * This library used RS256 for signing algorithm.
  *
@@ -7,7 +7,7 @@
  *
  * This library supports ESP8266, ESP32 and Raspberry Pi Pico.
  *
- * Created August 12, 2023
+ * Created August 13, 2023
  *
  * The MIT License (MIT)
  * Copyright (c) 2023 K. Suwatchai (Mobizt)

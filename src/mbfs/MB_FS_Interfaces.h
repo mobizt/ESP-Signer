@@ -92,7 +92,7 @@
 
 
 #ifndef MB_STRING_INCLUDE_CLASS
-#define MB_STRING_INCLUDE_CLASS "json/FirebaseJson.h"
+#define MB_STRING_INCLUDE_CLASS "../json/FirebaseJson.h"
 #endif
 
 #endif /* MB_FS_INTERFACES_H */

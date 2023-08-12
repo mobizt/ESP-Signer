@@ -60,7 +60,7 @@ static SdFat sd_fat_fs;   // should declare as static here
 #include <SD.h>
 #define DEFAULT_SD_FS SD
 #define CARD_TYPE_SD 1
-#elif  defined(ARDUINO_ARCH_RP2040) && !defined(ARDUINO_NANO_RP2040_CONNECT)
+#elif defined(ARDUINO_ARCH_RP2040) && !defined(ARDUINO_NANO_RP2040_CONNECT)
 // Use SDFS (ESP8266SdFat) instead of SD
 #include <SDFS.h>
 #define DEFAULT_SD_FS SDFS
@@ -70,15 +70,19 @@ static SdFat sd_fat_fs;   // should declare as static here
 // For ESP32, format SPIFFS or FFat if mounting failed
 #define FORMAT_FLASH_IF_MOUNT_FAILED 1
 
-
-
 /** Use PSRAM for supported ESP32/ESP8266 module */
 #if defined(ESP32) || defined(ESP8266)
 #define ESP_SIGNER_USE_PSRAM
 #endif
 
-// To use external Client.
-// #define ESP_SIGNER_ENABLE_EXTERNAL_CLIENT
+/* Enable NTP */
+#define ESP_SIGNER_ENABLE_NTP_TIME
+
+/* If not use on-board WiFi */
+// #define ESP_SIGNER_DISABLE_ONBOARD_WIFI
+
+/* If not use native Ethernet (Ethernet interfaces that supported by SDK) */
+// #define ESP_SIGNER_DISABLE_NATIVE_ETHERNET
 
 // For ESP8266 ENC28J60 Ethernet module
 // #define ESP_SIGNER_ENABLE_ESP8266_ENC28J60_ETH

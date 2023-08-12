@@ -7,7 +7,7 @@ The Service Account credentials i.e. project_id, client_email and private_key wh
 
 See [How to Create Service Account Private Key](#how-to-create-service-account-private-key) below.
 
-This library supports ESP8266, ESP32 and Raspberry Pi Pico (RP2040). 
+This library supports most Arduino devices except for AVR platform. 
 
 This library supports native ethernet for ESP8266 and ESP32 and SPI Ethernet for Raspberry Pi Pico.
 
@@ -24,7 +24,12 @@ And other network interface clients e.g., WiFiClient, EthernetClient and GSMClie
  * NodeMCU-32
  * WEMOS LOLIN32
  * TTGO T8 V1.8
- * Raspberry Pi Pico W
+ * Arduino MKR WiFi 1010
+ * Arduino MKR 1000 WIFI
+ * Arduino Nano 33 IoT
+ * Arduino MKR Vidor 4000
+ * Raspberry Pi Pico (RP2040)
+ * Arduino UNO R4 WiFi (Renesas).
 
 
 
@@ -167,6 +172,12 @@ const char PRIVATE_KEY[] PROGMEM = "-----BEGIN PRIVATE KEY-----\n...\n-----END P
 #include <WiFi.h>
 #elif defined(ESP8266)
 #include <ESP8266WiFi.h>
+#elif __has_include(<WiFiNINA.h>)
+#include <WiFiNINA.h>
+#elif __has_include(<WiFi101.h>)
+#include <WiFi101.h>
+#elif __has_include(<WiFiS3.h>)
+#include <WiFiS3.h>
 #endif
 
 #include <ESPSigner.h>
@@ -266,7 +277,7 @@ void loop()
   bool ready = Signer.tokenReady();
   if (ready)
   {
-    int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - time(nullptr);
+    int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - Signer.getCurrentTimestamp();
     //Token will be refreshed automatically
 
     Serial.print("Remaining seconds to refresh the token, ");
@@ -279,14 +290,14 @@ void tokenStatusCallback(TokenInfo info)
 {
   if (info.status == esp_signer_token_status_error)
   {
-    Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
-    Serial.printf("Token error: %s\n", Signer.getTokenError(info).c_str());
+    Signer.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
+    Signer.printf("Token error: %s\n", Signer.getTokenError(info).c_str());
   }
   else
   {
-    Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
+    Signer.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
     if (info.status == esp_signer_token_status_ready)
-      erial.printf("Token: %s\n", Signer.accessToken().c_str());
+      Signer.printf("Token: %s\n", Signer.accessToken().c_str());
   }
 }
 
@@ -387,15 +398,26 @@ void setExternalClient(Client *client, ESP_Signer_NetworkConnectionRequestCallba
                            ESP_Signer_NetworkStatusRequestCallback networkStatusCB);
 ```
 
-####  Assign UDP client and gmt offset for NTP time synching when using external SSL client
 
-param **`client`** The pointer to UDP client based on the network type.
+#### Assign TinyGsm Clients.
 
-param **`gmtOffset`** The GMT time offset.
+param **`client`** The pointer to TinyGsmClient.
+
+param **`modem`** The pointer to TinyGsm modem object. Modem should be initialized and/or set mode before transfering data.
+
+param **`pin`** The SIM pin.
+
+param **`apn`** The GPRS APN (Access Point Name).
+
+param **`user`** The GPRS user.
+
+param **`password`** The GPRS password.
 
 ```cpp
-void setUDPClient(UDP *client, float gmtOffset = 0);
+void setGSMClient(Client *client, void *modem, const char *pin, const char *apn, const char *user, const char *password);
 ```
+
+
 
 ####  Set the network status acknowledgement.
 
@@ -469,6 +491,15 @@ retuen **`unsigned long`** of timestamp.
 
 ```cpp
 unsigned long getExpiredTimestamp();
+```
+
+
+#### Get the current timestamp.
+
+return **`timestamp`**
+
+```cpp
+uint64_t getCurrentTimestamp();
 ```
 
 
@@ -581,6 +612,31 @@ return **`Boolean`** type status indicates the success of the operation.
 bool sdMMCBegin(const char *mountpoint = "/sdcard", bool mode1bit = false, bool format_if_mount_failed = false);
 ```
 
+
+#### Initiate SD card with SdFat SDIO configuration (with SdFat included only).
+
+param **`sdFatSDIOConfig`** The pointer to SdioConfig object for SdFat SDIO configuration.
+
+return **`boolean`** The boolean value indicates the success of operation.
+
+```cpp
+ bool sdBegin(SdioConfig *sdFatSDIOConfig);
+```
+
+#### Formatted printing on Serial.
+
+```cpp
+void printf(const char *format, ...);
+```
+
+
+#### Get free Heap memory.
+
+return **`Free memory amount in byte`**
+
+```cpp
+int getFreeHeap();
+```
 
 ## License
 

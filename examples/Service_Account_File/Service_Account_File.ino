@@ -14,6 +14,12 @@
 #include <WiFi.h>
 #elif defined(ESP8266)
 #include <ESP8266WiFi.h>
+#elif __has_include(<WiFiNINA.h>)
+#include <WiFiNINA.h>
+#elif __has_include(<WiFi101.h>)
+#include <WiFi101.h>
+#elif __has_include(<WiFiS3.h>)
+#include <WiFiS3.h>
 #endif
 
 #include <ESP_Signer.h>
@@ -135,7 +141,7 @@ void loop()
     bool ready = Signer.tokenReady();
     if (ready)
     {
-        int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - time(nullptr);
+        int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - Signer.getCurrentTimestamp();
 
         Serial.print("Remaining seconds to refresh the token, ");
         Serial.println(t);
@@ -147,13 +153,13 @@ void tokenStatusCallback(TokenInfo info)
 {
     if (info.status == esp_signer_token_status_error)
     {
-        Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
-        Serial.printf("Token error: %s\n", Signer.getTokenError(info).c_str());
+        Signer.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
+        Signer.printf("Token error: %s\n", Signer.getTokenError(info).c_str());
     }
     else
     {
-        Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
+        Signer.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
         if (info.status == esp_signer_token_status_ready)
-            Serial.printf("Token: %s\n", Signer.accessToken().c_str());
+            Signer.printf("Token: %s\n", Signer.accessToken().c_str());
     }
 }

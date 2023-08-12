@@ -21,6 +21,8 @@ getTokenStatus  KEYWORD2
 getTokenError   KEYWORD2
 sdBegin KEYWORD2
 getExpiredTimestamp KEYWORD2
+getCurrentTimestamp KEYWORD2
+getFreeHeap KEYWORD2
 refreshToken    KEYWORD2
 setSystemTime   KEYWORD2
 sdBegin KEYWORD2

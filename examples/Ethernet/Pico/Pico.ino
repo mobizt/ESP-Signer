@@ -10,7 +10,7 @@
  *
  */
 
-// This example shows how to use Raspberry Pi Pico to create OAuth2 access token via ethernet using external SSL client
+// This example shows how to use Raspberry Pi Pico to create OAuth2 access token via ethernett
 // This example is for Raspberri Pi Pico and W5500 Ethernet module.
 
 /**
@@ -39,9 +39,6 @@
 
 #include <ESP_Signer.h>
 
-// https://github.com/mobizt/ESP_SSLClient
-#include <ESP_SSLClient.h>
-
 #include <Ethernet.h>
 
 /** These credentials are taken from Service Account key file (JSON)
@@ -69,17 +66,7 @@ void tokenStatusCallback(TokenInfo info);
 // The network interface devices that can be used to handle SSL data should
 // have large memory buffer up to 1k - 2k or more, otherwise the SSL/TLS handshake
 // will fail.
-EthernetClient basic_client;
-
-// This is the wrapper client that utilized the basic client for io and
-// provides the mean for the data encryption and decryption before sending to or after read from the io.
-// The most probable failures are related to the basic client itself that may not provide the buffer
-// that large enough for SSL data.
-// The SSL client can do nothing for this case, you should increase the basic client buffer memory.
-ESP_SSLClient ssl_client;
-
-// UDP Client for NTP Time synching
-EthernetUDP udpClient;
+EthernetClient eth;
 
 void begin();
 
@@ -136,9 +123,6 @@ void setup()
     Serial.println();
 
     networkConnection();
-
-    ssl_client.setClient(&basic_client);
-    ssl_client.setInsecure();
 }
 
 void loop()
@@ -152,7 +136,7 @@ void loop()
     bool ready = Signer.tokenReady();
     if (ready)
     {
-        int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - time(nullptr);
+        int t = Signer.getExpiredTimestamp() - config.signer.preRefreshSeconds - Signer.getCurrentTimestamp();
 
         Serial.print("Remaining seconds to refresh the token, ");
         Serial.println(t);
@@ -164,14 +148,14 @@ void tokenStatusCallback(TokenInfo info)
 {
     if (info.status == esp_signer_token_status_error)
     {
-        Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
-        Serial.printf("Token error: %s\n", Signer.getTokenError(info).c_str());
+        Signer.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
+        Signer.printf("Token error: %s\n", Signer.getTokenError(info).c_str());
     }
     else
     {
-        Serial.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
+        Signer.printf("Token info: type = %s, status = %s\n", Signer.getTokenType(info).c_str(), Signer.getTokenStatus(info).c_str());
         if (info.status == esp_signer_token_status_ready)
-            Serial.printf("Token: %s\n", Signer.accessToken().c_str());
+            Signer.printf("Token: %s\n", Signer.accessToken().c_str());
     }
 }
 
@@ -194,11 +178,8 @@ void begin()
 
     config.signer.tokens.scope = "https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/drive.file";
 
-    /* Assign the pointer to global defined external SSL Client object and required callback functions */
-    Signer.setExternalClient(&ssl_client, networkConnection, networkStatusRequestCallback);
-
-    /* Assign UDP client and gmt offset for NTP time synching when using external SSL client */
-    Signer.setUDPClient(&udpClient, 3);
+    /* Assign the pointer to global defined external Client object and required callback functions */
+    Signer.setExternalClient(&eth, networkConnection, networkStatusRequestCallback);
 
     Signer.begin(&config);
 }

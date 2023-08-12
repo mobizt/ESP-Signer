@@ -28,6 +28,10 @@
 #include <Arduino.h>
 #include "mbfs/MB_MCU.h"
 #include "ESP_Signer_Error.h"
+#include "ESP_Signer_Network.h"
+#if __has_include(<FS.h>)
+#include <FS.h>
+#endif
 
 #if defined(ESP32) && !defined(ESP_ARDUINO_VERSION) /* ESP32 core < v2.0.x */
 #include <sys/time.h>
@@ -37,7 +41,6 @@
 
 #include "FS_Config.h"
 #include "mbfs/MB_FS.h"
-#include "auth/MB_NTP.h"
 #if defined(ESP32)
 #include "mbedtls/pk.h"
 #include "mbedtls/entropy.h"
@@ -240,21 +243,14 @@ struct esp_signer_gauth_token_signer_resources_t
     MB_String pk;
     size_t hashSize = 32; // SHA256 size (256 bits or 32 bytes)
     size_t signatureSize = 256;
-#if defined(ESP32)
-    uint8_t *hash = nullptr;
-#elif defined(ESP8266) || defined(MB_ARDUINO_PICO)
+
     char *hash = nullptr;
-#endif
     unsigned char *signature = nullptr;
     MB_String encHeader;
     MB_String encPayload;
     MB_String encHeadPayload;
     MB_String encSignature;
-#if defined(ESP32)
-    mbedtls_pk_context *pk_ctx = nullptr;
-    mbedtls_entropy_context *entropy_ctx = nullptr;
-    mbedtls_ctr_drbg_context *ctr_drbg_ctx = nullptr;
-#endif
+
     esp_signer_gauth_auth_token_info_t tokens;
 };
 
@@ -437,9 +433,15 @@ typedef struct esp_signer_gauth_spi_ethernet_module_t
 
 class esp_signer_wifi
 {
+    friend class GAuth_TCP_Client;
+
 public:
-    esp_signer_wifi() { clearAP(); };
-    ~esp_signer_wifi() { credentials.clear(); };
+    esp_signer_wifi(){};
+    ~esp_signer_wifi()
+    {
+        clearAP();
+        clearMulti();
+    };
     void addAP(const String &ssid, const String &password)
     {
         esp_signer_wifi_credential_t data;
@@ -460,6 +462,50 @@ public:
 
 private:
     MB_List<esp_signer_wifi_credential_t> credentials;
+#if defined(ESP_SIGNER_HAS_WIFIMULTI)
+    WiFiMulti *multi = nullptr;
+#endif
+    void reconnect()
+    {
+        if (credentials.size())
+        {
+            disconnect();
+            connect();
+        }
+    }
+
+    void connect()
+    {
+#if defined(ESP_SIGNER_HAS_WIFIMULTI)
+
+        clearMulti();
+        multi = new WiFiMulti();
+        for (size_t i = 0; i < credentials.size(); i++)
+            multi->addAP(credentials[i].ssid.c_str(), credentials[i].password.c_str());
+
+        if (credentials.size() > 0)
+            multi->run();
+
+#elif defined(ESP_SIGNER_WIFI_IS_AVAILABLE)
+        WiFi.begin((CONST_STRING_CAST)credentials[0].ssid.c_str(), credentials[0].password.c_str());
+#endif
+    }
+
+    void disconnect()
+    {
+#if defined(ESP_SIGNER_WIFI_IS_AVAILABLE)
+        WiFi.disconnect();
+#endif
+    }
+
+    void clearMulti()
+    {
+#if defined(ESP_SIGNER_HAS_WIFIMULTI)
+        if (multi)
+            delete multi;
+        multi = nullptr;
+#endif
+    }
 };
 
 struct esp_signer_gauth_cfg_t

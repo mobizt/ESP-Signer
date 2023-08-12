@@ -1,3 +1,7 @@
+/**
+ * Created August 12, 2023
+ */
+
 #ifndef ESP_SIGNER_HELPER_H
 #define ESP_SIGNER_HELPER_H
 
@@ -65,125 +69,147 @@ namespace MemoryHelper
 
 namespace TimeHelper
 {
-
-    inline time_t getTime(uint32_t *mb_ts, uint32_t *mb_ts_offset)
+    inline uint32_t getTimestamp(int year, int mon, int date, int hour, int mins, int sec)
     {
-        uint32_t &tm = *mb_ts;
-#if defined(ENABLE_EXTERNAL_CLIENT) || defined(MB_ARDUINO_PICO)
-        tm = *mb_ts_offset + millis() / 1000;
-
-#if defined(MB_ARDUINO_PICO)
-        if (tm < time(nullptr))
-            tm = time(nullptr);
-#endif
-
-#elif defined(ESP32) || defined(ESP8266)
-        tm = time(nullptr);
-#endif
-        return tm;
+        struct tm timeinfo;
+        timeinfo.tm_year = year - 1900;
+        timeinfo.tm_mon = mon - 1;
+        timeinfo.tm_mday = date;
+        timeinfo.tm_hour = hour;
+        timeinfo.tm_min = mins;
+        timeinfo.tm_sec = sec;
+        uint32_t ts = mktime(&timeinfo);
+        return ts;
     }
 
-    inline int setTimestamp(time_t ts)
+    inline uint32_t getTime(uint32_t *mb_ts, uint32_t *mb_ts_offset)
     {
-#if defined(ESP32) || defined(ESP8266)
-        struct timeval tm = {ts, 0}; // sec, us
-        return settimeofday((const timeval *)&tm, 0);
-#endif
-        return -1;
-    }
-
-    inline bool setTime(time_t ts, uint32_t *mb_ts, uint32_t *mb_ts_offset)
-    {
-        bool ret = false;
-
-#if defined(ESP32) || defined(ESP8266)
-        ret = setTimestamp(ts) == 0;
-        *mb_ts = time(nullptr);
-#else
-        if (ts > ESP_SIGNER_DEFAULT_TS)
-        {
-            *mb_ts_offset = ts - millis() / 1000;
-            *mb_ts = ts;
-            ret = true;
-        }
-#endif
-
-        return ret;
-    }
-
-    inline bool updateClock(MB_NTP *ntp, uint32_t *mb_ts, uint32_t *mb_ts_offset)
-    {
-        uint32_t ts = ntp->getTime(2000 /* wait 10000 ms */);
-        if (ts > 0)
-            *mb_ts_offset = ts - millis() / 1000;
-
-        time_t now = getTime(mb_ts, mb_ts_offset);
-
-        bool rdy = now > ESP_SIGNER_DEFAULT_TS;
-
-#if defined(ESP32) || defined(ESP8266)
-        if (rdy && time(nullptr) < now)
-            setTime(now, mb_ts, mb_ts_offset);
-#endif
-
-        return rdy;
-    }
-
-    inline bool syncClock(MB_NTP *ntp, uint32_t *mb_ts, uint32_t *mb_ts_offset, float gmtOffset, esp_signer_gauth_cfg_t *config)
-    {
-
-        if (!config)
-            return false;
-
-        time_t now = getTime(mb_ts, mb_ts_offset);
-
-        config->internal.clock_rdy = (unsigned long)now > ESP_SIGNER_DEFAULT_TS;
-
-        if (config->internal.clock_rdy && gmtOffset == config->internal.gmt_offset)
-            return true;
-
-        if (!config->internal.clock_rdy || gmtOffset != config->internal.gmt_offset)
-        {
-            if (config->internal.clock_rdy && gmtOffset != config->internal.gmt_offset)
-                config->internal.clock_synched = false;
-
-            if (!config->internal.clock_synched)
-            {
-                config->internal.clock_synched = true;
-
-#if defined(ENABLE_EXTERNAL_CLIENT)
-
-                updateClock(ntp, mb_ts, mb_ts_offset);
-
-#else
-
 #if defined(ESP32) || defined(ESP8266) || defined(MB_ARDUINO_PICO)
 
-#if defined(MB_ARDUINO_PICO)
+        if (*mb_ts < time(nullptr))
+            *mb_ts = time(nullptr);
+
+#elif defined(ESP_SIGNER_HAS_WIFI_TIME)
+        if (WiFI_CONNECTED)
+            *mb_ts = WiFi.getTime() > ESP_SIGNER_DEFAULT_TS ? WiFi.getTime() : *mb_ts;
+#else
+        *mb_ts = *mb_ts_offset + millis() / 1000;
+#endif
+        return *mb_ts;
+    }
+
+    inline void syncSysTeme(uint32_t *mb_ts, uint32_t *mb_ts_offset)
+    {
+        getTime(mb_ts, mb_ts_offset);
+
+#if defined(ESP32) || defined(ESP8266) || defined(MB_ARDUINO_PICO)
+        uint32_t &sys_ts = *mb_ts;
+        if (sys_ts < time(nullptr) && time(nullptr) > ESP_SIGNER_DEFAULT_TS)
+        {
+            sys_ts = time(nullptr);
+        }
+#endif
+    }
+
+    inline int setTimestamp(time_t ts, uint32_t *mb_ts_offset)
+    {
+#if defined(MB_ARDUINO_ESP)
+        struct timeval tm; // sec, us
+        tm.tv_sec = ts;
+        tm.tv_usec = 0;
+        return settimeofday((const struct timeval *)&tm, 0);
+#else
+        *mb_ts_offset = ts - millis() / 1000;
+        return 1;
+#endif
+    }
+
+    inline bool clockReady(uint32_t *mb_ts, uint32_t *mb_ts_offset, bool withUpdate = false)
+    {
+
+        bool clock_rdy = false;
+
+        uint32_t &sys_ts = *mb_ts;
+
+        if (!withUpdate)
+            clock_rdy = sys_ts > ESP_SIGNER_DEFAULT_TS;
+        else
+        {
+            getTime(mb_ts, mb_ts_offset);
+
+            syncSysTeme(mb_ts, mb_ts_offset);
+
+            clock_rdy = sys_ts > ESP_SIGNER_DEFAULT_TS;
+
+            // Update system timestamp and its offset when time/timezone changed.
+            if (clock_rdy)
+            {
+                *mb_ts_offset = sys_ts - millis() / 1000;
+            }
+
+#if defined(MB_ARDUINO_ESP)
+            // If system timestamp was set, update the device time
+            if (sys_ts > ESP_SIGNER_DEFAULT_TS && time(nullptr) < sys_ts)
+                setTimestamp(sys_ts, mb_ts_offset);
+#endif
+        }
+
+        return clock_rdy;
+    }
+
+    inline void ntpGetTime(esp_signer_gauth_cfg_t *config, uint32_t *mb_ts, float gmtOffset)
+    {
+        uint32_t &sys_ts = *mb_ts;
+
+        config->internal.clock_rdy = sys_ts > ESP_SIGNER_DEFAULT_TS;
+
+        if (config->internal.clock_rdy && gmtOffset == config->internal.gmt_offset)
+            return;
+
+        if (!config->internal.clock_synched)
+        {
+
+            if (WiFI_CONNECTED)
+            {
+
+#if defined(ESP_SIGNER_ENABLE_NTP_TIME)
+#if (defined(ESP32) || defined(ESP8266))
+                configTime(gmtOffset * 3600, 0 * 60, "pool.ntp.org", "time.nist.gov");
+#elif defined(ARDUINO_RASPBERRY_PI_PICO_W)
                 NTP.begin("pool.ntp.org", "time.nist.gov");
                 NTP.waitSet();
-
-                now = time(nullptr);
-                if (now > ESP_SIGNER_DEFAULT_TS)
-                    *mb_ts_offset = now - millis() / 1000;
-
+#endif
+#endif
+                unsigned long ms = millis();
+                do
+                {
+#if defined(ESP_SIGNER_HAS_WIFI_TIME)
+                    sys_ts = WiFi.getTime() > ESP_SIGNER_DEFAULT_TS ? WiFi.getTime() : sys_ts;
+#elif defined(ESP_SIGNER_ENABLE_NTP_TIME)
+                    sys_ts = time(nullptr) > ESP_SIGNER_DEFAULT_TS ? time(nullptr) : sys_ts;
 #else
-                configTime(gmtOffset * 3600, 0, "pool.ntp.org", "time.nist.gov");
+                    break;
 #endif
-
-#endif
-
-#endif
+                    delay(100);
+                } while (millis() - ms < 10000 && sys_ts < ESP_SIGNER_DEFAULT_TS);
             }
         }
 
-        now = getTime(mb_ts, mb_ts_offset);
+        config->internal.clock_rdy = sys_ts > ESP_SIGNER_DEFAULT_TS;
 
-        config->internal.clock_rdy = (unsigned long)now > ESP_SIGNER_DEFAULT_TS;
         if (config->internal.clock_rdy)
+        {
             config->internal.gmt_offset = gmtOffset;
+            config->internal.clock_synched = true;
+        }
+    }
 
-        return config->internal.clock_rdy;
+    inline bool syncClock(uint32_t *mb_ts, uint32_t *mb_ts_offset, float gmtOffset, esp_signer_gauth_cfg_t *config)
+    {
+
+        ntpGetTime(config, mb_ts, gmtOffset);
+
+        return clockReady(mb_ts, mb_ts_offset, true);
     }
 
 };

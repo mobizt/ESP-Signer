@@ -1,9 +1,9 @@
 /**
- * Google OAuth2.0 Client v1.0.1
+ * Google OAuth2.0 Client v1.0.2
  *
  * This library supports Espressif ESP8266, ESP32 and Raspberry Pi Pico MCUs.
  *
- * Created February 6, 2023
+ * Created August 12, 2023
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -31,10 +31,13 @@
 
 #include <Arduino.h>
 #include "mbfs/MB_MCU.h"
-#include "client/GAuth_TCP_Client.h"
+
+#if __has_include(<FS.h>)
 #include <FS.h>
+#endif
+
 #include "mbfs/MB_FS.h"
-#include "MB_NTP.h"
+#include "client/GAuth_TCP_Client.h"
 #include "ESP_Signer_Const.h"
 
 class GAuth_OAuth2_Client
@@ -52,8 +55,6 @@ private:
     MB_FS *mbfs = nullptr;
     uint32_t *mb_ts = nullptr;
     uint32_t *mb_ts_offset = nullptr;
-    MB_NTP ntpClient;
-    UDP *udp= nullptr;
     float gmtOffset = 0;
 #if defined(ESP8266)
     callback_function_t esp8266_cb = nullptr;
@@ -67,6 +68,11 @@ private:
     bool autoReconnectWiFi = true;
     unsigned long last_reconnect_millis = 0;
     uint16_t reconnect_tmo = 10 * 1000;
+
+    esp_signer_client_type _cli_type = esp_signer_client_type_undefined;
+    ESP_Signer_NetworkConnectionRequestCallback _net_con_cb =  NULL;
+    ESP_Signer_NetworkStatusRequestCallback _net_stat_cb = NULL;
+    Client *_cli = nullptr;
 
     /* intitialize the class */
     void begin(esp_signer_gauth_cfg_t *cfg, MB_FS *mbfs, uint32_t *mb_ts, uint32_t *mb_ts_offset);
@@ -109,7 +115,6 @@ private:
     bool handleResponse(GAuth_TCP_Client *client, int &httpCode, MB_String &payload, bool stopSession = true);
     /* process the tokens (generation, signing, request and refresh) */
     void tokenProcessingTask();
-    bool checkUDP(UDP *udp, bool &ret, bool &_token_processing_task_enable, float gmtOffset);
     /* encode and sign the JWT token */
     bool createJWT();
     /* request or refresh the token */

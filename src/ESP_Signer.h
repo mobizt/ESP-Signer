@@ -55,20 +55,21 @@ public:
     void setExternalClient(Client *client, ESP_Signer_NetworkConnectionRequestCallback networkConnectionCB,
                            ESP_Signer_NetworkStatusRequestCallback networkStatusCB)
     {
-#if defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT)
         mSetClient(client, networkConnectionCB, networkStatusCB);
-#endif
     }
 
-    /** Assign UDP client and gmt offset for NTP time synching when using external SSL client
-     * @param client The pointer to UDP client based on the network type.
-     * @param gmtOffset The GMT time offset.
+    /** Assign TinyGsm Clients.
+     *
+     * @param client The pointer to TinyGsmClient.
+     * @param modem The pointer to TinyGsm modem object. Modem should be initialized and/or set mode before transfering data
+     * @param pin The SIM pin.
+     * @param apn The GPRS APN (Access Point Name).
+     * @param user The GPRS user.
+     * @param password The GPRS password.
      */
-    void setUDPClient(UDP *client, float gmtOffset = 0)
+    void setGSMClient(Client *client, void *modem = nullptr, const char *pin = nullptr, const char *apn = nullptr, const char *user = nullptr, const char *password = nullptr)
     {
-#if defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT)
-        mSetUDPClient(client, gmtOffset);
-#endif
+        authClient.tcpClient->setGSMClient(client, modem, pin, apn, user, password);
     }
 
     /** Set the network status acknowledgement.
@@ -147,6 +148,14 @@ public:
      *
      */
     unsigned long getExpiredTimestamp();
+
+    /**
+     * Get the current timestamp.
+     *
+     * @return timestamp.
+     *
+     */
+    uint64_t getCurrentTimestamp();
 
     /**
      * Refresh the access token
@@ -249,6 +258,18 @@ public:
     }
 #endif
 
+    /**
+     * Formatted printing on Serial.
+     *
+     */
+    void printf(const char *format, ...);
+
+    /** Get free Heap memory.
+     *
+     * @return Free memory amount in byte.
+     */
+    int getFreeHeap();
+
 protected:
     SignerConfig *config = nullptr;
 
@@ -256,23 +277,8 @@ protected:
     MB_FS mbfs;
     uint32_t mb_ts = 0;
     uint32_t mb_ts_offset = 0;
-    int response_code = 0;
-
-    int cert_addr = 0;
-    bool cert_updated = false;
-
-    void setTokenCallback(TokenStatusCallback callback);
-    void setPrerefreshSeconds(uint16_t seconds);
-    bool isError(MB_String &response);
-    bool setClock(float gmtOffset);
-#if defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT)
     void mSetClient(Client *client, ESP_Signer_NetworkConnectionRequestCallback networkConnectionCB,
-                   ESP_Signer_NetworkStatusRequestCallback networkStatusCB);
-    void mSetUDPClient(UDP *client, float gmtOffset = 0);
-#endif
-    bool setSecure();
-    void reset();
-    bool waitClockReady();
+                    ESP_Signer_NetworkStatusRequestCallback networkStatusCB);
 };
 
 extern ESP_Signer Signer;

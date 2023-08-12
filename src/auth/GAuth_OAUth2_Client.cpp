@@ -1,9 +1,9 @@
 /**
- * Google OAuth2.0 Client v1.0.0
+ * Google OAuth2.0 Client v1.0.2
  *
  * This library supports Espressif ESP8266, ESP32 and Raspberry Pi Pico MCUs.
  *
- * Created February 6, 2023
+ * Created August 12, 2023
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -64,19 +64,29 @@ void GAuth_OAuth2_Client::end()
 
 void GAuth_OAuth2_Client::newClient(GAuth_TCP_Client **client)
 {
-
     freeClient(client);
-
     if (!*client)
     {
         *client = new GAuth_TCP_Client();
+        // restore only external client (gsm client integration cannot restore)
+        if (_cli_type == esp_signer_client_type_external_basic_client)
+            (*client)->setClient(_cli, _net_con_cb, _net_stat_cb);
+        else
+            (*client)->_client_type = _cli_type;
     }
 }
 
 void GAuth_OAuth2_Client::freeClient(GAuth_TCP_Client **client)
 {
     if (*client)
+    {
+        // Keep external client pointers
+        _cli_type = (*client)->type();
+        _net_con_cb = (*client)->_network_connection_cb;
+        _net_stat_cb = (*client)->_network_status_cb;
+        _cli = (*client)->_basic_client;
         delete *client;
+    }
     *client = nullptr;
 }
 
@@ -186,9 +196,9 @@ time_t GAuth_OAuth2_Client::getTime()
 bool GAuth_OAuth2_Client::setTime(time_t ts)
 {
 
-#if !defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT) && (defined(ESP8266) || defined(ESP32) || defined(MB_ARDUINO_PICO))
+#if defined(ESP8266) || defined(ESP32) || defined(MB_ARDUINO_PICO)
 
-    if (TimeHelper::setTimestamp(ts) == 0)
+    if (TimeHelper::setTimestamp(ts, mb_ts_offset) == 0)
     {
         this->ts = time(nullptr);
         *mb_ts = this->ts;
@@ -392,28 +402,6 @@ void GAuth_OAuth2_Client::freeJson()
     resultPtr = nullptr;
 }
 
-bool GAuth_OAuth2_Client::checkUDP(UDP *udp, bool &ret, bool &_token_processing_task_enable, float gmtOffset)
-{
-#if defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT)
-
-    if (udp)
-        ntpClient.begin(udp, "pool.ntp.org" /* NTP host */, 123 /* NTP port */, gmtOffset * 3600 /* timezone offset in seconds */);
-    else
-    {
-        config->signer.tokens.error.message.clear();
-        setTokenError(ESP_SIGNER_ERROR_UDP_CLIENT_REQUIRED);
-        sendTokenStatusCB();
-        config->signer.tokens.status = esp_signer_token_status_on_initialize;
-        config->signer.step = esp_signer_gauth_jwt_generation_step_begin;
-        _token_processing_task_enable = false;
-        ret = true;
-        return false;
-    }
-#endif
-
-    return true;
-}
-
 void GAuth_OAuth2_Client::tokenProcessingTask()
 {
     // We don't have to use memory reserved tasks e.g., RTOS task in ESP32 for this JWT
@@ -427,45 +415,45 @@ void GAuth_OAuth2_Client::tokenProcessingTask()
 
     config->signer.tokenTaskRunning = true;
 
-    // flag set for valid time required
-    bool sslValidTime = false;
-
-#if defined(ESP8266) || defined(MB_ARDUINO_PICO)
-    // valid time required for SSL handshake using server certificate in ESP8266
-    if (config->cert.data != NULL || config->cert.file.length() > 0)
-        sslValidTime = true;
-#endif
-
     time_t now = getTime();
 
     while (!ret && config->signer.tokens.status != esp_signer_token_status_ready)
     {
         Utils::idle();
         // check time if clock synching once set in the JWT token generating process (during beginning step)
-        // or valid time required for SSL handshake in ESP8266
-        if (!config->internal.clock_rdy && (config->internal.clock_synched || sslValidTime))
+        if (!config->internal.clock_rdy)
         {
             if (readyToSync())
             {
                 if (isSyncTimeOut())
                 {
                     config->signer.tokens.error.message.clear();
-                    setTokenError(ESP_SIGNER_ERROR_NTP_SYNC_TIMED_OUT);
+                    if (_cli_type == esp_signer_client_type_internal_basic_client)
+                        setTokenError(ESP_SIGNER_ERROR_NTP_SYNC_TIMED_OUT);
+                    else
+                        setTokenError(ESP_SIGNER_ERROR_SYS_TIME_IS_NOT_READY);
                     sendTokenStatusCB();
                     config->signer.tokens.status = esp_signer_token_status_on_initialize;
                     config->internal.last_jwt_generation_error_cb_millis = 0;
                 }
 
-                // reset flag to allow clock synching execution again in ut->syncClock if clocck synching was timed out
+                // reset flag to allow clock synching execution again in TimeHelper::syncClock if clocck synching was timed out
                 config->internal.clock_synched = false;
                 reconnect();
             }
 
-            if (!checkUDP(udp, ret, _token_processing_task_enable, config->time_zone))
-                continue;
-
             // check or set time again
-            TimeHelper::syncClock(&ntpClient, mb_ts, mb_ts_offset, config->time_zone, config);
+            if (_cli_type == esp_signer_client_type_external_gsm_client)
+            {
+                uint32_t _time = tcpClient->gprsGetTime();
+                if (_time > 0)
+                {
+                    *mb_ts = _time;
+                    TimeHelper::setTimestamp(_time, mb_ts_offset);
+                }
+            }
+            else
+                TimeHelper::syncClock(mb_ts, mb_ts_offset, config->time_zone, config);
 
             // exit task immediately if time is not ready synched
             // which handleToken function should run repeatedly to enter this function again.
@@ -481,11 +469,9 @@ void GAuth_OAuth2_Client::tokenProcessingTask()
             (millis() - config->internal.last_jwt_begin_step_millis > config->timeout.tokenGenerationBeginStep ||
              config->internal.last_jwt_begin_step_millis == 0))
         {
-            if (!checkUDP(udp, ret, _token_processing_task_enable, config->time_zone))
-                continue;
 
             // time must be set first
-            TimeHelper::syncClock(&ntpClient, mb_ts, mb_ts_offset, config->time_zone, config);
+            TimeHelper::syncClock(mb_ts, mb_ts_offset, config->time_zone, config);
             config->internal.last_jwt_begin_step_millis = millis();
 
             if (config->internal.clock_rdy)
@@ -873,31 +859,12 @@ bool GAuth_OAuth2_Client::createJWT()
         config->signer.encHeader.clear();
         config->signer.encPayload.clear();
 
-// create message digest from encoded header and payload
-#if defined(ESP32)
-        config->signer.hash = MemoryHelper::createBuffer<uint8_t *>(mbfs, config->signer.hashSize);
-        int ret = mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
-                             (const unsigned char *)config->signer.encHeadPayload.c_str(),
-                             config->signer.encHeadPayload.length(), config->signer.hash);
-        if (ret != 0)
-        {
-            char *temp = MemoryHelper::createBuffer<char *>(mbfs, 100);
-            mbedtls_strerror(ret, temp, 100);
-            config->signer.tokens.error.message = temp;
-            config->signer.tokens.error.message.insert(0, (const char *)FPSTR("mbedTLS, mbedtls_md: "));
-            MemoryHelper::freeBuffer(mbfs, temp);
-            setTokenError(ESP_SIGNER_ERROR_TOKEN_CREATE_HASH);
-            sendTokenStatusCB();
-            MemoryHelper::freeBuffer(mbfs, config->signer.hash);
-            return false;
-        }
-#elif defined(ESP8266) || defined(MB_ARDUINO_PICO)
+        // create message digest from encoded header and payload
         config->signer.hash = MemoryHelper::createBuffer<char *>(mbfs, config->signer.hashSize);
         br_sha256_context mc;
         br_sha256_init(&mc);
         br_sha256_update(&mc, config->signer.encHeadPayload.c_str(), config->signer.encHeadPayload.length());
         br_sha256_out(&mc, config->signer.hash);
-#endif
 
         config->signer.tokens.jwt = config->signer.encHeadPayload;
         config->signer.tokens.jwt += esp_signer_gauth_pgm_str_35; // "."
@@ -909,98 +876,14 @@ bool GAuth_OAuth2_Client::createJWT()
     {
         config->signer.tokens.status = esp_signer_token_status_on_signing;
 
-#if defined(ESP32)
-        config->signer.pk_ctx = new mbedtls_pk_context();
-        mbedtls_pk_init(config->signer.pk_ctx);
-
-        // parse priv key
-        int ret = 0;
-        if (config->signer.pk.length() > 0)
-            ret = mbedtls_pk_parse_key(config->signer.pk_ctx,
-                                       (const unsigned char *)config->signer.pk.c_str(),
-                                       config->signer.pk.length() + 1, NULL, 0);
-        else if (strlen_P(config->service_account.data.private_key) > 0)
-            ret = mbedtls_pk_parse_key(config->signer.pk_ctx,
-                                       (const unsigned char *)config->service_account.data.private_key,
-                                       strlen_P(config->service_account.data.private_key) + 1, NULL, 0);
-
-        if (ret != 0)
-        {
-            char *temp = MemoryHelper::createBuffer<char *>(mbfs, 100);
-            mbedtls_strerror(ret, temp, 100);
-            config->signer.tokens.error.message = temp;
-            config->signer.tokens.error.message.insert(0, (const char *)FPSTR("mbedTLS, mbedtls_pk_parse_key: "));
-            MemoryHelper::freeBuffer(mbfs, temp);
-            setTokenError(ESP_SIGNER_ERROR_TOKEN_PARSE_PK);
-            sendTokenStatusCB();
-            mbedtls_pk_free(config->signer.pk_ctx);
-            MemoryHelper::freeBuffer(mbfs, config->signer.hash);
-            delete config->signer.pk_ctx;
-            config->signer.pk_ctx = nullptr;
-            return false;
-        }
-
-        // generate RSA signature from private key and message digest
-        config->signer.signature = MemoryHelper::createBuffer<unsigned char *>(mbfs, config->signer.signatureSize);
-        size_t sigLen = 0;
-        config->signer.entropy_ctx = new mbedtls_entropy_context();
-        config->signer.ctr_drbg_ctx = new mbedtls_ctr_drbg_context();
-        mbedtls_entropy_init(config->signer.entropy_ctx);
-        mbedtls_ctr_drbg_init(config->signer.ctr_drbg_ctx);
-        mbedtls_ctr_drbg_seed(config->signer.ctr_drbg_ctx, mbedtls_entropy_func, config->signer.entropy_ctx, NULL, 0);
-
-        ret = mbedtls_pk_sign(config->signer.pk_ctx, MBEDTLS_MD_SHA256,
-                              (const unsigned char *)config->signer.hash, config->signer.hashSize,
-                              config->signer.signature, &sigLen,
-                              mbedtls_ctr_drbg_random, config->signer.ctr_drbg_ctx);
-        if (ret != 0)
-        {
-            char *temp = MemoryHelper::createBuffer<char *>(mbfs, 100);
-            mbedtls_strerror(ret, temp, 100);
-            config->signer.tokens.error.message = temp;
-            config->signer.tokens.error.message.insert(0, (const char *)FPSTR("mbedTLS, mbedtls_pk_sign: "));
-            MemoryHelper::freeBuffer(mbfs, temp);
-            setTokenError(ESP_SIGNER_ERROR_TOKEN_SIGN);
-            sendTokenStatusCB();
-        }
-        else
-        {
-            config->signer.encSignature.clear();
-            size_t len = Base64Helper::encodedLength(config->signer.signatureSize);
-            char *buf = MemoryHelper::createBuffer<char *>(mbfs, len);
-            Base64Helper::encodeUrl(mbfs, buf, config->signer.signature, config->signer.signatureSize);
-            config->signer.encSignature = buf;
-            MemoryHelper::freeBuffer(mbfs, buf);
-
-            config->signer.tokens.jwt += config->signer.encSignature;
-            config->signer.pk.clear();
-            config->signer.encSignature.clear();
-        }
-
-        MemoryHelper::freeBuffer(mbfs, config->signer.signature);
-        MemoryHelper::freeBuffer(mbfs, config->signer.hash);
-        mbedtls_pk_free(config->signer.pk_ctx);
-        mbedtls_entropy_free(config->signer.entropy_ctx);
-        mbedtls_ctr_drbg_free(config->signer.ctr_drbg_ctx);
-        delete config->signer.pk_ctx;
-        delete config->signer.entropy_ctx;
-        delete config->signer.ctr_drbg_ctx;
-
-        config->signer.pk_ctx = nullptr;
-        config->signer.entropy_ctx = nullptr;
-        config->signer.ctr_drbg_ctx = nullptr;
-
-        if (ret != 0)
-            return false;
-#elif defined(ESP8266) || defined(MB_ARDUINO_PICO)
         // RSA private key
-        BearSSL::PrivateKey *pk = nullptr;
+        PrivateKey *pk = nullptr;
         Utils::idle();
         // parse priv key
         if (config->signer.pk.length() > 0)
-            pk = new BearSSL::PrivateKey((const char *)config->signer.pk.c_str());
+            pk = new PrivateKey((const char *)config->signer.pk.c_str());
         else if (strlen_P(config->service_account.data.private_key) > 0)
-            pk = new BearSSL::PrivateKey((const char *)config->service_account.data.private_key);
+            pk = new PrivateKey((const char *)config->service_account.data.private_key);
 
         if (!pk)
         {
@@ -1054,7 +937,6 @@ bool GAuth_OAuth2_Client::createJWT()
             sendTokenStatusCB();
             return false;
         }
-#endif
     }
 
     return true;
@@ -1084,9 +966,7 @@ bool GAuth_OAuth2_Client::initClient(PGM_P subDomain, esp_signer_gauth_auth_toke
     if (!reconnect(tcpClient))
         return false;
 
-#if defined(ESP8266)
     tcpClient->setBufferSizes(2048, 1024);
-#endif
 
     initJson();
 
@@ -1377,8 +1257,6 @@ bool GAuth_OAuth2_Client::reconnect(GAuth_TCP_Client *client, unsigned long data
     if (!client)
         return false;
 
-    bool status = client->networkReady();
-
     if (dataTime > 0)
     {
         unsigned long tmo = ESP_SIGNER_DEFAULT_SERVER_RESPONSE_TIMEOUT;
@@ -1395,8 +1273,11 @@ bool GAuth_OAuth2_Client::reconnect(GAuth_TCP_Client *client, unsigned long data
         }
     }
 
+    bool status = client->networkReady();
+
     if (!status)
     {
+
         client->stop();
 
         if (autoReconnectWiFi)
@@ -1415,39 +1296,7 @@ bool GAuth_OAuth2_Client::reconnect(GAuth_TCP_Client *client, unsigned long data
                     setTokenError(ESP_SIGNER_ERROR_EXTERNAL_CLIENT_NOT_INITIALIZED);
                     sendTokenStatusCB();
                 }
-
-#if defined(ESP32) || defined(ESP8266)
-                WiFi.reconnect();
-#else
-                if (config->wifi.size() > 0)
-                {
-#if __has_include(<WiFi.h>)
-                    if (!status)
-                    {
-                        WiFi.disconnect();
-#if defined(HAS_WIFIMULTI)
-
-                        if (multi)
-                            delete multi;
-                        multi = nullptr;
-
-                        multi = new WiFiMulti();
-                        for (size_t i = 0; i < config->wifi.size(); i++)
-                            multi->addAP(config->wifi[i].ssid.c_str(), config->wifi[i].password.c_str());
-
-                        if (config->wifi.size() > 0)
-                            multi->run();
-
-#else
-                        WiFi.begin(config->wifi[0].ssid.c_str(), config->wifi[0].password.c_str());
-
-#endif
-                    }
-#endif
-                }
-                else
-                    client->networkReconnect();
-#endif
+                client->networkReconnect();
                 config->internal.last_reconnect_millis = millis();
             }
         }
@@ -1494,6 +1343,16 @@ void GAuth_OAuth2_Client::errorToString(int httpCode, MB_String &buff)
     case ESP_SIGNER_ERROR_TCP_ERROR_NO_HTTP_SERVER:
         buff += F("no HTTP server");
         return;
+    case ESP_SIGNER_ERROR_TCP_CLIENT_MISSING_NETWORK_CONNECTION_CB:
+        buff += F("network connection callback is required");
+        return;
+    case ESP_SIGNER_ERROR_TCP_CLIENT_MISSING_NETWORK_STATUS_CB:
+        buff += F("network connection status callback is required");
+        return;
+    case ESP_SIGNER_ERROR_TCP_CLIENT_NOT_INITIALIZED:
+        buff += F("client and/or necessary callback functions are not yet assigned");
+        return;
+
     case ESP_SIGNER_ERROR_HTTP_CODE_BAD_REQUEST:
         buff += F("bad request");
         return;
@@ -1611,10 +1470,13 @@ void GAuth_OAuth2_Client::errorToString(int httpCode, MB_String &buff)
 #endif
 
     case ESP_SIGNER_ERROR_NTP_SYNC_TIMED_OUT:
-        buff += F("NTP server time synching failed");
+        buff += F("NTP server time synching failed.");
+        return;
+    case ESP_SIGNER_ERROR_SYS_TIME_IS_NOT_READY:
+        buff += F("System time or library reference time was not set. Use Signer.setSystemTime to set time.");
         return;
     case ESP_SIGNER_ERROR_EXTERNAL_CLIENT_NOT_INITIALIZED:
-        buff += F("External client is not yet initialized");
+        buff += F("External client is not yet initialized.");
         return;
 
     case ESP_SIGNER_ERROR_UDP_CLIENT_REQUIRED:

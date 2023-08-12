@@ -1,5 +1,5 @@
 /**
- * Google's OAuth2.0 Access token Generation class, Signer.cpp version 1.3.1
+ * Google's OAuth2.0 Access token Generation class, Signer.cpp version 1.4.0
  *
  * This library used RS256 for signing algorithm.
  *
@@ -7,7 +7,7 @@
  *
  * This library supports ESP8266, ESP32 and Raspberry Pi Pico.
  *
- * Created Match 5, 2023
+ * Created August 12, 2023
  *
  * The MIT License (MIT)
  * Copyright (c) 2023 K. Suwatchai (Mobizt)
@@ -79,95 +79,11 @@ String ESP_Signer::accessToken()
     return config->internal.auth_token.c_str();
 }
 
-bool ESP_Signer::setClock(float gmtOffset)
-{
-    return TimeHelper::syncClock(&authClient.ntpClient, &mb_ts, &mb_ts_offset, gmtOffset, config);
-}
-
-#if defined(ESP_SIGNER_ENABLE_EXTERNAL_CLIENT)
 void ESP_Signer::mSetClient(Client *client, ESP_Signer_NetworkConnectionRequestCallback networkConnectionCB,
-                           ESP_Signer_NetworkStatusRequestCallback networkStatusCB)
+                            ESP_Signer_NetworkStatusRequestCallback networkStatusCB)
 {
     authClient.tcpClient->setClient(client, networkConnectionCB, networkStatusCB);
     authClient.tcpClient->setCACert(nullptr);
-}
-
-void ESP_Signer::mSetUDPClient(UDP *client, float gmtOffset)
-{
-    authClient.udp = client;
-    authClient.gmtOffset = gmtOffset;
-}
-#endif
-
-bool ESP_Signer::waitClockReady()
-{
-    unsigned long ms = millis();
-    while (!setClock(config->internal.gmt_offset) && millis() - ms < 3000)
-    {
-        Utils::idle();
-    }
-    return config->internal.clock_rdy;
-}
-
-void ESP_Signer::reset()
-{
-    authClient.reset();
-}
-
-bool ESP_Signer::setSecure()
-{
-    GAuth_TCP_Client *client = authClient.tcpClient;
-
-    if (!client)
-        return false;
-
-    client->setConfig(config, &mbfs);
-
-    if (!authClient.reconnect(client))
-        return false;
-
-#if (defined(ESP8266) || defined(MB_ARDUINO_PICO))
-    if (TimeHelper::getTime(&mb_ts, &mb_ts_offset) > ESP_SIGNER_DEFAULT_TS)
-    {
-        config->internal.clock_rdy = true;
-        client->setClockStatus(true);
-    }
-#endif
-
-    if (client->getCertType() == esp_signer_cert_type_undefined || cert_updated)
-    {
-
-        if (!config->internal.clock_rdy && (config->cert.file.length() > 0 || config->cert.data != NULL || cert_addr > 0))
-            TimeHelper::syncClock(&authClient.ntpClient, &mb_ts, &mb_ts_offset, config->internal.gmt_offset, config);
-
-        if (config->cert.file.length() == 0)
-        {
-            if (cert_addr > 0)
-                client->setCACert(reinterpret_cast<const char *>(cert_addr));
-            else if (config->cert.data != NULL)
-                client->setCACert(config->cert.data);
-            else
-                client->setCACert(NULL);
-        }
-        else
-        {
-            if (!client->setCertFile(config->cert.file.c_str(), (mb_fs_mem_storage_type)config->cert.file_storage))
-                client->setCACert(NULL);
-        }
-        cert_updated = false;
-    }
-    return true;
-}
-
-bool ESP_Signer::isError(MB_String &response)
-{
-    authClient.initJson();
-    bool ret = false;
-    if (JsonHelper::setData(authClient.jsonPtr, response, false))
-        ret = JsonHelper::parse(authClient.jsonPtr, authClient.resultPtr, esp_signer_gauth_pgm_str_14) || JsonHelper::parse(authClient.jsonPtr, authClient.resultPtr, esp_signer_gauth_pgm_str_14);
-
-    authClient.freeJson();
-    return ret;
 }
 
 bool ESP_Signer::tokenReady()
@@ -210,6 +126,12 @@ unsigned long ESP_Signer::getExpiredTimestamp()
     return authClient.getExpiredTimestamp();
 }
 
+uint64_t ESP_Signer::getCurrentTimestamp()
+{
+    TimeHelper::getTime(&mb_ts, &mb_ts_offset);
+    return mb_ts;
+}
+
 void ESP_Signer::refreshToken()
 {
     authClient.refreshToken();
@@ -218,6 +140,28 @@ void ESP_Signer::refreshToken()
 bool ESP_Signer::setSystemTime(time_t ts)
 {
     return authClient.setTime(ts);
+}
+
+void ESP_Signer::printf(const char *format, ...)
+{
+    int size = 2048;
+    char s[size];
+    va_list va;
+    va_start(va, format);
+    vsnprintf(s, size, format, va);
+    va_end(va);
+    Serial.print(s);
+}
+
+int ESP_Signer::getFreeHeap()
+{
+#if defined(MB_ARDUINO_ESP)
+  return ESP.getFreeHeap();
+#elif defined(MB_ARDUINO_PICO)
+  return rp2040.getFreeHeap();
+#else
+  return 0;
+#endif
 }
 
 ESP_Signer Signer = ESP_Signer();

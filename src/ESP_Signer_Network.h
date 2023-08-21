@@ -1,5 +1,5 @@
 /**
- * Created August 12, 2023
+ * Created August 21, 2023
  */
 #ifndef ESP_SIGNER_NETWORK_H
 #define ESP_SIGNER_NETWORK_H
@@ -7,6 +7,9 @@
 #include "FS_Config.h"
 #include "ESP_Signer_ESP8266_Supports.h"
 
+#if __has_include(<esp_idf_version.h>)
+#include <esp_idf_version.h>
+#endif
 
 #if defined(ESP32) || defined(ESP8266) || defined(ARDUINO_RASPBERRY_PI_PICO_W) || \
     defined(ARDUINO_UNOWIFIR4) || defined(ARDUINO_PORTENTA_C33) ||                \

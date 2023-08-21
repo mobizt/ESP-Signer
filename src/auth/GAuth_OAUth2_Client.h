@@ -1,9 +1,9 @@
 /**
- * Google OAuth2.0 Client v1.0.2
+ * Google OAuth2.0 Client v1.0.3
  *
  * This library supports Espressif ESP8266, ESP32 and Raspberry Pi Pico MCUs.
  *
- * Created August 12, 2023
+ * Created August 21, 2023
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -70,9 +70,14 @@ private:
     uint16_t reconnect_tmo = 10 * 1000;
 
     esp_signer_client_type _cli_type = esp_signer_client_type_undefined;
-    ESP_Signer_NetworkConnectionRequestCallback _net_con_cb =  NULL;
+    ESP_Signer_NetworkConnectionRequestCallback _net_con_cb = NULL;
     ESP_Signer_NetworkStatusRequestCallback _net_stat_cb = NULL;
     Client *_cli = nullptr;
+
+#if defined(ESP_SIGNER_GSM_MODEM_IS_AVAILABLE)
+    MB_String _pin, _apn, _user, _password;
+    void *_modem = nullptr;
+#endif
 
     /* intitialize the class */
     void begin(esp_signer_gauth_cfg_t *cfg, MB_FS *mbfs, uint32_t *mb_ts, uint32_t *mb_ts_offset);
@@ -113,6 +118,8 @@ private:
     bool handleTaskError(int code, int httpCode = 0);
     // parse the auth token response
     bool handleResponse(GAuth_TCP_Client *client, int &httpCode, MB_String &payload, bool stopSession = true);
+    /* Get time */
+    void tryGetTime();
     /* process the tokens (generation, signing, request and refresh) */
     void tokenProcessingTask();
     /* encode and sign the JWT token */
@@ -160,11 +167,8 @@ private:
     }
 #endif
 
-#if defined(MB_ARDUINO_PICO)
-#if __has_include(<WiFiMulti.h>)
-#define HAS_WIFIMULTI
+#if defined(ESP_SIGNER_HAS_WIFIMULTI)
     WiFiMulti *multi = nullptr;
-#endif
 #endif
 };
 

@@ -1,5 +1,5 @@
 /**
- * Created August 12, 2023
+ * Created August 21, 2023
  */
 
 #ifndef ESP_SIGNER_HELPER_H
@@ -251,36 +251,6 @@ namespace StringHelper
     inline size_t getReservedLen(MB_FS *mbfs, size_t len)
     {
         return mbfs->getReservedLen(len);
-    }
-
-    inline void splitString(const MB_String &str, MB_VECTOR<MB_String> out, const char delim)
-    {
-        size_t current = 0, previous = 0;
-        current = str.find(delim, 0);
-        MB_String s;
-        while (current != MB_String::npos)
-        {
-            s.clear();
-            str.substr(s, previous, current - previous);
-            s.trim();
-            if (s.length() > 0)
-                out.push_back(s);
-
-            previous = current + 1;
-            current = str.find(delim, previous);
-            Utils::idle();
-        }
-
-        s.clear();
-
-        if (previous > 0 && current == MB_String::npos)
-            str.substr(s, previous, str.length() - previous);
-        else
-            s = str;
-        s.trim();
-        if (s.length() > 0)
-            out.push_back(s);
-        s.clear();
     }
 
     inline void pushTk(const MB_String &str, MB_VECTOR<MB_String> &tk)

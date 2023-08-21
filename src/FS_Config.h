@@ -85,13 +85,13 @@ static SdFat sd_fat_fs;   // should declare as static here
 // #define ESP_SIGNER_DISABLE_NATIVE_ETHERNET
 
 // For ESP8266 ENC28J60 Ethernet module
-// #define ESP_SIGNER_ENABLE_ESP8266_ENC28J60_ETH
+// #define ENABLE_ESP8266_ENC28J60_ETH
 
 // For ESP8266 W5100 Ethernet module
-// #define ESP_SIGNER_ENABLE_ESP8266_W5100_ETH
+// #define ENABLE_ESP8266_W5100_ETH
 
 // For ESP8266 W5500 Ethernet module
-// #define ESP_SIGNER_ENABLE_ESP8266_W5500_ETH
+// #define ENABLE_ESP8266_W5500_ETH
 
 // To use your custom config, create Custom_FS_Config.h in the same folder of this FS_Config.h file
 #if __has_include("Custom_FS_Config.h")

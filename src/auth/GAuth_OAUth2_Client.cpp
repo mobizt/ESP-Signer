@@ -1,9 +1,9 @@
 /**
- * Google OAuth2.0 Client v1.0.2
+ * Google OAuth2.0 Client v1.0.3
  *
  * This library supports Espressif ESP8266, ESP32 and Raspberry Pi Pico MCUs.
  *
- * Created August 12, 2023
+ * Created August 21, 2023
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -53,7 +53,7 @@ void GAuth_OAuth2_Client::begin(esp_signer_gauth_cfg_t *cfg, MB_FS *mbfs, uint32
 void GAuth_OAuth2_Client::end()
 {
     freeJson();
-#if defined(HAS_WIFIMULTI)
+#if defined(ESP_SIGNER_HAS_WIFIMULTI)
     if (multi)
         delete multi;
     multi = nullptr;
@@ -68,9 +68,15 @@ void GAuth_OAuth2_Client::newClient(GAuth_TCP_Client **client)
     if (!*client)
     {
         *client = new GAuth_TCP_Client();
-        // restore only external client (gsm client integration cannot restore)
+
         if (_cli_type == esp_signer_client_type_external_basic_client)
             (*client)->setClient(_cli, _net_con_cb, _net_stat_cb);
+        else if (_cli_type == esp_signer_client_type_external_gsm_client)
+        {
+#if defined(ESP_SIGNER_GSM_MODEM_IS_AVAILABLE)
+            (*client)->setGSMClient(_cli, _modem, _pin.c_str(), _apn.c_str(), _user.c_str(), _password.c_str());
+#endif
+        }
         else
             (*client)->_client_type = _cli_type;
     }
@@ -80,11 +86,24 @@ void GAuth_OAuth2_Client::freeClient(GAuth_TCP_Client **client)
 {
     if (*client)
     {
-        // Keep external client pointers
         _cli_type = (*client)->type();
-        _net_con_cb = (*client)->_network_connection_cb;
-        _net_stat_cb = (*client)->_network_status_cb;
         _cli = (*client)->_basic_client;
+        if (_cli_type == esp_signer_client_type_external_basic_client)
+        {
+            _net_con_cb = (*client)->_network_connection_cb;
+            _net_stat_cb = (*client)->_network_status_cb;
+        }
+        else if (_cli_type == esp_signer_client_type_external_gsm_client)
+        {
+#if defined(ESP_SIGNER_GSM_MODEM_IS_AVAILABLE)
+            _pin = (*client)->_pin;
+            _apn = (*client)->_apn;
+            _user = (*client)->_user;
+            _password = (*client)->_password;
+            _modem = (*client)->_modem;
+#endif
+        }
+
         delete *client;
     }
     *client = nullptr;
@@ -402,6 +421,28 @@ void GAuth_OAuth2_Client::freeJson()
     resultPtr = nullptr;
 }
 
+void GAuth_OAuth2_Client::tryGetTime()
+{
+
+    if (!tcpClient || config->internal.clock_rdy)
+        return;
+
+    _cli_type = tcpClient->type();
+
+    if (tcpClient->type() == esp_signer_client_type_external_gsm_client)
+    {
+        uint32_t _time = tcpClient->gprsGetTime();
+        if (_time > 0)
+        {
+            *mb_ts = _time;
+            TimeHelper::setTimestamp(_time, mb_ts_offset);
+            config->internal.clock_rdy = TimeHelper::clockReady(mb_ts, mb_ts_offset);
+        }
+    }
+    else
+        TimeHelper::syncClock(mb_ts, mb_ts_offset, config->time_zone, config);
+}
+
 void GAuth_OAuth2_Client::tokenProcessingTask()
 {
     // We don't have to use memory reserved tasks e.g., RTOS task in ESP32 for this JWT
@@ -443,17 +484,7 @@ void GAuth_OAuth2_Client::tokenProcessingTask()
             }
 
             // check or set time again
-            if (_cli_type == esp_signer_client_type_external_gsm_client)
-            {
-                uint32_t _time = tcpClient->gprsGetTime();
-                if (_time > 0)
-                {
-                    *mb_ts = _time;
-                    TimeHelper::setTimestamp(_time, mb_ts_offset);
-                }
-            }
-            else
-                TimeHelper::syncClock(mb_ts, mb_ts_offset, config->time_zone, config);
+            tryGetTime();
 
             // exit task immediately if time is not ready synched
             // which handleToken function should run repeatedly to enter this function again.
@@ -471,7 +502,7 @@ void GAuth_OAuth2_Client::tokenProcessingTask()
         {
 
             // time must be set first
-            TimeHelper::syncClock(mb_ts, mb_ts_offset, config->time_zone, config);
+            tryGetTime();
             config->internal.last_jwt_begin_step_millis = millis();
 
             if (config->internal.clock_rdy)
@@ -1440,9 +1471,6 @@ void GAuth_OAuth2_Client::errorToString(int httpCode, MB_String &buff)
     case ESP_SIGNER_ERROR_TOKEN_PARSE_PK:
         buff += F("RSA private key parsing failed");
         break;
-    case ESP_SIGNER_ERROR_TOKEN_CREATE_HASH:
-        buff += F("create message digest");
-        break;
     case ESP_SIGNER_ERROR_TOKEN_SIGN:
         buff += F("JWT token signing failed");
         break;
@@ -1477,10 +1505,6 @@ void GAuth_OAuth2_Client::errorToString(int httpCode, MB_String &buff)
         return;
     case ESP_SIGNER_ERROR_EXTERNAL_CLIENT_NOT_INITIALIZED:
         buff += F("External client is not yet initialized.");
-        return;
-
-    case ESP_SIGNER_ERROR_UDP_CLIENT_REQUIRED:
-        buff += F("UDP client is required for NTP server time synching based on your network type \ne.g. WiFiUDP or EthernetUDP. Please call Signer.setUDPClient(&udpClient, gmtOffset); to assign the UDP client.");
         return;
 
     case ESP_SIGNER_ERROR_MISSING_SERVICE_ACCOUNT_CREDENTIALS:

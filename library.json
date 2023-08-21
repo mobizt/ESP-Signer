@@ -1,6 +1,6 @@
 {
   "name": "ESP Signer",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "keywords": "communication, REST, esp32, esp8266, raspberrypi, arduino",
   "description": "The Google OAuth2.0 access token generation for Arduino devices. This library also supports external networking devices wirh Arduino Clients e.g. WiFiClient, EthernetClient, and GSMClient.",
   "repository": {

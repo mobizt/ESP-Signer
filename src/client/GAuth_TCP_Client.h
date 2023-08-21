@@ -1,9 +1,9 @@
 /**
- * GAuth TCP Client v1.0.2
+ * GAuth TCP Client v1.0.3
  *
  * This library supports Espressif ESP8266, ESP32 and Raspberry Pi Pico MCUs.
  *
- * Created August 12, 2023
+ * Created August 21, 2023
  *
  * The MIT License (MIT)
  * Copyright (c) 2022 K. Suwatchai (Mobizt)
@@ -40,6 +40,16 @@
 #if defined(ESP32)
 #include "IPAddress.h"
 #include "lwip/sockets.h"
+
+#if defined(ESP_SIGNER_WIFI_IS_AVAILABLE)
+#define WIFI_HAS_HOST_BY_NAME
+#endif
+#include "../client/WiFiClientImpl.h"
+#define BASE_WIFICLIENT WiFiClientImpl
+
+#elif defined(ESP_SIGNER_WIFI_IS_AVAILABLE)
+#include "WiFiClient.h"
+#define BASE_WIFICLIENT WiFiClient
 #endif
 
 #pragma GCC diagnostic ignored "-Wdelete-non-virtual-dtor"
@@ -105,6 +115,7 @@ public:
     _user = user;
     _password = password;
     _modem = modem;
+    _basic_client = client;
     _client_type = esp_signer_client_type_external_gsm_client;
 #endif
   }
@@ -276,7 +287,7 @@ public:
 
   void ethDNSWorkAround(SPI_ETH_Module *eth, const char *host, uint16_t port)
   {
-
+#if defined(ESP_SIGNER_ETH_IS_AVAILABLE)
     if (!eth)
       return;
 
@@ -304,10 +315,12 @@ public:
 #if defined(INC_ENC28J60_LWIP) || defined(INC_W5100_LWIP) || defined(INC_W5500_LWIP)
   ex:
 #if defined(ESP_SIGNER_WIFI_IS_AVAILABLE)
-    WiFiClient _client;
+    BASE_WIFICLIENT _client;
     _client.connect(host, port);
     _client.stop();
 #endif
+#endif
+
 #endif
   }
 
@@ -510,7 +523,7 @@ public:
       {
 // Device has no built-in WiFi, external client required.
 #if defined(ESP_SIGNER_WIFI_IS_AVAILABLE)
-        _basic_client = new WiFiClient();
+        _basic_client = new BASE_WIFICLIENT();
         _client_type = esp_signer_client_type_internal_basic_client;
 #else
         _last_error = 1;
@@ -526,13 +539,8 @@ public:
 
 #if defined(ESP_SIGNER_WIFI_IS_AVAILABLE) && (defined(ESP32) || defined(ESP8266) || defined(MB_ARDUINO_PICO))
     if (_client_type == esp_signer_client_type_internal_basic_client)
-      reinterpret_cast<WiFiClient *>(_basic_client)->setNoDelay(true);
+      reinterpret_cast<BASE_WIFICLIENT *>(_basic_client)->setNoDelay(true);
 #endif
-
-    // For TCP keepalive should work in ESP8266 core > 3.1.2.
-    // https://github.com/esp8266/Arduino/pull/8940
-
-    // Not currently supported by WiFiClientSecure in Arduino Pico core
 
     if (_client_type == esp_signer_client_type_internal_basic_client)
     {
@@ -542,9 +550,9 @@ public:
 
 #if defined(ESP8266)
         if (_tcpKeepIdleSeconds == 0 || _tcpKeepIntervalSeconds == 0 || _tcpKeepCount == 0)
-          reinterpret_cast<WiFiClient *>(_basic_client)->disableKeepAlive();
+          reinterpret_cast<BASE_WIFICLIENT *>(_basic_client)->disableKeepAlive();
         else
-          reinterpret_cast<WiFiClient *>(_basic_client)->keepAlive(_tcpKeepIdleSeconds, _tcpKeepIntervalSeconds, _tcpKeepCount);
+          reinterpret_cast<BASE_WIFICLIENT *>(_basic_client)->keepAlive(_tcpKeepIdleSeconds, _tcpKeepIntervalSeconds, _tcpKeepCount);
 
 #elif defined(ESP32)
 
@@ -820,7 +828,7 @@ public:
     if (_basic_client && _client_type == esp_signer_client_type_internal_basic_client)
     {
 #if defined(ESP_SIGNER_WIFI_IS_AVAILABLE)
-      delete (WiFiClient *)_basic_client;
+      delete (BASE_WIFICLIENT *)_basic_client;
 #else
       delete _basic_client;
 #endif
@@ -929,7 +937,8 @@ public:
     {
       if (gsmModem->getNetworkTime(&year3, &month3, &day3, &hour3, &min3, &sec3, &timezone))
       {
-        return TimeHelper::getTimestamp(year3, month3, day3, hour3, min3, sec3);
+         //We have to subtract the local GSM network timezone to get GMT time
+        return TimeHelper::getTimestamp(year3, month3, day3, hour3, min3, sec3) - timezone * 3600;
       }
     }
 #endif
@@ -939,9 +948,7 @@ public:
   int setOption(int option, int *value)
   {
 #if defined(ESP32) && defined(ESP_SIGNER_WIFI_IS_AVAILABLE)
-    // Actually we wish to use setSocketOption directly but it is ambiguous in old ESP32 core v1.0.x.;
-    // Use setOption instead for old core support.
-    return reinterpret_cast<WiFiClient *>(_basic_client)->setOption(option, value);
+    return reinterpret_cast<BASE_WIFICLIENT *>(_basic_client)->setOption(option, value);
 #endif
     return 0;
   }

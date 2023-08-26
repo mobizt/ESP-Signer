@@ -51,6 +51,9 @@ public:
      * @param client The pointer to Arduino Client derived class of SSL Client.
      * @param networkConnectionCB The function that handles the network connection.
      * @param networkStatusCB The function that handle the network connection status acknowledgement.
+     * 
+     * Due to the client pointer is assigned, to avoid dangling pointer, 
+     * client should be existed as long as it was used for transportation.
      */
     void setExternalClient(Client *client, ESP_Signer_NetworkConnectionRequestCallback networkConnectionCB,
                            ESP_Signer_NetworkStatusRequestCallback networkStatusCB)
@@ -66,6 +69,9 @@ public:
      * @param apn The GPRS APN (Access Point Name).
      * @param user The GPRS user.
      * @param password The GPRS password.
+     * 
+     * Due to the client and modem pointers are assigned, to avoid dangling pointer, 
+     * client and modem should be existed as long as it was used for transportation.
      */
     void setGSMClient(Client *client, void *modem = nullptr, const char *pin = nullptr, const char *apn = nullptr, const char *user = nullptr, const char *password = nullptr)
     {

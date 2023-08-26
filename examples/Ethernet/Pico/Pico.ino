@@ -179,6 +179,8 @@ void begin()
     config.signer.tokens.scope = "https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/drive.file";
 
     /* Assign the pointer to global defined external Client object and required callback functions */
+    // Due to the client (eth) pointer is assigned, to avoid dangling pointer, 
+    // client should be existed as long as it was used for transportation.
     Signer.setExternalClient(&eth, networkConnection, networkStatusRequestCallback);
 
     Signer.begin(&config);

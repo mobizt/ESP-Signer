@@ -165,7 +165,9 @@ void setup()
     config.token_status_callback = tokenStatusCallback;
 
     config.signer.tokens.scope = "https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/drive.file";
-
+    
+    // Due to the gsm_client and modem pointers are assigned, to avoid dangling pointer, 
+    // gsm_client and modem should be existed as long as it was used for transportation.
     Signer.setGSMClient(&gsm_client, &modem, GSM_PIN, apn, gprsUser, gprsPass);
 
     Signer.begin(&config);

@@ -415,7 +415,7 @@ public:
     if (_client_type == esp_signer_client_type_external_basic_client &&
         (!_network_connection_cb || !_network_status_cb))
       rdy = false;
-    else if (_client_type != esp_signer_client_type_external_basic_client ||
+    else if (_client_type != esp_signer_client_type_external_basic_client &&
              _client_type != esp_signer_client_type_external_gsm_client)
       rdy = false;
 #else

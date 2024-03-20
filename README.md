@@ -29,7 +29,6 @@ And other network interface clients e.g., WiFiClient, EthernetClient and GSMClie
  * Arduino Nano 33 IoT
  * Arduino MKR Vidor 4000
  * Raspberry Pi Pico (RP2040)
- * Arduino UNO R4 WiFi (Renesas).
 
 
 
